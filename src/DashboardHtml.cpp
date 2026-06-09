@@ -271,7 +271,7 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
       <div class="arena-head">
         <div>
           <h2>Bester Agent · Live-Replay</h2>
-          <p class="arena-explain">So bewegt sich der aktuell beste Agent. Das <b>türkise Quadrat</b> ist der Agent — er steuert sich selbst und versucht, möglichst viel <span class="hi-food">Nahrung</span> (gelbe Punkte) einzusammeln. Die türkise Spur zeigt seinen zuletzt gelaufenen Weg; graue Felder sind Wände. Die Episode läuft in Schleife.</p>
+         
         </div>
         <div class="arena-meta mono"><span id="rGen">–</span></div>
       </div>

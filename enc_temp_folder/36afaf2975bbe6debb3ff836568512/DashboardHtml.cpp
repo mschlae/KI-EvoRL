@@ -1,0 +1,690 @@
+// ============================================================
+//  DashboardHtml.cpp  -  Eingebettete Dashboard-Seite
+//  AUTO-GENERIERT aus web/index.html. Zum Anpassen entweder
+//  diese Datei direkt editieren oder web/index.html aendern
+//  und neu einbetten (siehe README, Abschnitt "Dashboard").
+// ============================================================
+#include "DashboardHtml.h"
+
+const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EvoRL · Trainings-Monitor</title>
+<style>
+  :root{
+    --ink:#0a0e13;        /* Hintergrund          */
+    --panel:#121922;      /* Kartenflaeche        */
+    --panel-2:#0e151d;    /* tiefer gesetzt       */
+    --line:#1f2b38;       /* Rahmen / Raster      */
+    --txt:#dfe7ef;        /* Primaertext          */
+    --muted:#6b7d90;      /* Sekundaertext        */
+    --amber:#f5a623;      /* Hauptsignal          */
+    --teal:#2dd4bf;       /* Zweitsignal          */
+    --rose:#f43f5e;       /* Warnung / Inject     */
+    --grid-radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #15202c 0%, transparent 60%),
+      var(--ink);
+    color:var(--txt);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace}
+
+  header{
+    display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+    padding:22px 28px;border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0;font-size:20px;font-weight:600;letter-spacing:.02em;
+  }
+  header h1 .dot{color:var(--amber)}
+  header .sub{color:var(--muted);font-size:13px}
+  .status-pill{
+    margin-left:auto;display:inline-flex;align-items:center;gap:9px;
+    padding:7px 14px;border:1px solid var(--line);border-radius:999px;
+    font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+  }
+  .status-pill .led{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+  .status-pill.live .led{background:var(--teal);box-shadow:0 0 0 0 rgba(45,212,191,.5);animation:pulse 1.6s infinite}
+  .status-pill.live{color:var(--teal);border-color:#1c3a37}
+  .status-pill.done .led{background:var(--amber)}
+  .status-pill.done{color:var(--amber);border-color:#3a3017}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,212,191,.45)}70%{box-shadow:0 0 0 8px rgba(45,212,191,0)}100%{box-shadow:0 0 0 0 rgba(45,212,191,0)}}
+
+  /* Stop-Button (aktive Steuerung) */
+  .btn-stop{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 16px;border:1px solid #5b2330;border-radius:999px;
+    background:linear-gradient(180deg,#2a151b,#1c0f13);color:var(--rose);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;
+    text-transform:uppercase;cursor:pointer;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .btn-stop:hover{background:var(--rose);color:#fff;border-color:var(--rose)}
+  .btn-stop:disabled{opacity:.6;cursor:default;color:var(--muted);border-color:var(--line);background:var(--panel-2)}
+  .btn-stop:disabled:hover{background:var(--panel-2);color:var(--muted)}
+  .btn-stop[hidden]{display:none}
+
+  main{padding:24px 28px 48px;max-width:1280px;margin:0 auto}
+
+  /* Parameter-Panel (Live-Tuning) */
+  .config{background:var(--panel);border:1px solid var(--line);border-radius:var(--grid-radius);padding:16px 18px;margin-bottom:26px}
+  .config-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .config-head h2{margin:0;font-size:13.5px;font-weight:600;letter-spacing:.02em}
+  .config-head .hint{color:var(--muted);font-size:12px}
+  .config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:13px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .field input{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;color:var(--txt);
+    font-family:"JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    font-size:15px;padding:9px 11px;width:100%;outline:none;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  .field input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,166,35,.15)}
+  /* native Spinner ausblenden -> reine Tastatureingabe */
+  .field input::-webkit-outer-spin-button,.field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .field input[type=number]{-moz-appearance:textfield}
+  .config-actions{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
+  .btn-apply{
+    display:inline-flex;align-items:center;gap:8px;padding:9px 20px;border-radius:999px;
+    border:1px solid #6a4a13;background:linear-gradient(180deg,#2a2113,#1b150c);color:var(--amber);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .btn-apply:hover{background:var(--amber);color:#0a0e13;border-color:var(--amber)}
+  .btn-apply:disabled{opacity:.6;cursor:default}
+  .btn-ghost{
+    display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel-2);color:var(--muted);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+    transition:color .15s,border-color .15s;
+  }
+  .btn-ghost:hover{color:var(--txt);border-color:#2c3a48}
+  .cfg-msg{font-size:12.5px;color:var(--muted)}
+  .cfg-msg.ok{color:var(--teal)}
+  .cfg-msg.err{color:var(--rose)}
+
+  /* Generations-Fortschritt */
+  .progress-wrap{margin-bottom:24px}
+  .progress-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .progress-head .gen{font-size:15px}
+  .progress-head .gen b{font-size:22px;font-weight:600}
+  .progress-head .pct{color:var(--muted);font-size:13px}
+  .bar{height:6px;background:var(--panel-2);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .bar > span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amber),#ffcf6b);transition:width .4s ease}
+
+  /* Kennzahlen-Raster */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:26px}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);border-radius:var(--grid-radius);
+    padding:16px 18px;position:relative;overflow:hidden;
+  }
+  .card .label{color:var(--muted);font-size:11.5px;letter-spacing:.07em;text-transform:uppercase}
+  .card .value{margin-top:8px;font-size:28px;font-weight:600;line-height:1}
+  .card .unit{color:var(--muted);font-size:13px;margin-left:4px;font-weight:400}
+  .card.accent .value{color:var(--amber)}
+  .card.teal .value{color:var(--teal)}
+  .card::after{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--line)}
+  .card.accent::after{background:linear-gradient(90deg,var(--amber),transparent)}
+  .card.teal::after{background:linear-gradient(90deg,var(--teal),transparent)}
+
+  /* Live-Replay-Arena */
+  .arena{background:var(--panel);border:1px solid var(--line);border-radius:var(--grid-radius);padding:18px 20px 16px;margin-bottom:26px}
+  .arena-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+  .arena-head h2{margin:0;font-size:13.5px;font-weight:600;letter-spacing:.02em}
+  .arena-explain{margin:7px 0 0;max-width:62ch;color:var(--muted);font-size:12.5px;line-height:1.55}
+  .arena-explain b{color:var(--teal);font-weight:600}
+  .arena-explain .hi-food{color:var(--amber);font-weight:600}
+  .arena-meta{color:var(--muted);font-size:12.5px;white-space:nowrap}
+  #arenaCanvas{width:100%;max-width:520px;aspect-ratio:1/1;height:auto;display:block;margin:0 auto;
+    background:radial-gradient(120% 120% at 50% 0%, #101a24 0%, var(--panel-2) 70%);
+    border:1px solid var(--line);border-radius:12px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.03), 0 8px 30px rgba(0,0,0,.35)}
+  .arena-bar{max-width:520px;margin:12px auto 0;height:4px;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .arena-bar > span{display:block;height:100%;width:0;border-radius:999px;
+    background:linear-gradient(90deg,var(--teal),#7af0e1);transition:width .12s linear}
+
+  .arena-controls{display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+  .arena-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel-2);color:var(--txt);
+    font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;transition:border-color .15s,color .15s}
+  .arena-btn:hover{border-color:#2c3a48;color:#fff}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--panel-2)}
+  .seg-btn{padding:7px 13px;border:0;background:transparent;color:var(--muted);
+    font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:color .15s,background .15s}
+  .seg-btn.is-active{background:var(--teal);color:#06231f}
+  .gen-select{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase}
+  .gen-select select{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:999px;color:var(--txt);
+    font-family:"JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    font-size:12.5px;padding:7px 30px 7px 13px;cursor:pointer;outline:none;text-transform:none;letter-spacing:0;
+    -webkit-appearance:none;appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%236b7d90' stroke-width='1.5' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 11px center;transition:border-color .15s;
+  }
+  .gen-select select:focus{border-color:var(--teal)}
+  .arena-stat{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+  .arena-stat .dim{opacity:.55}
+  .arena-stat .dot-food{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber)}
+
+  .arena-legend{display:flex;gap:18px;justify-content:center;margin-top:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .arena-legend .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .arena-legend .agent{background:var(--teal)}
+  .arena-legend .food{background:var(--amber);border-radius:50%}
+  .arena-legend .trail{background:rgba(45,212,191,.35)}
+  .arena-legend .wall{background:#23303d}
+
+  /* Charts */
+  .charts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:980px){.charts{grid-template-columns:1fr 1fr}}
+  @media(max-width:640px){.charts{grid-template-columns:1fr}}
+  .chart{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--grid-radius);padding:16px 18px 10px;
+  }
+  .chart h2{margin:0 0 2px;font-size:13.5px;font-weight:600;letter-spacing:.02em}
+  .chart .legend{display:flex;gap:16px;margin:4px 0 10px;font-size:12px;color:var(--muted)}
+  .chart .legend i{display:inline-block;width:10px;height:2px;margin-right:6px;vertical-align:middle}
+  canvas{width:100%;height:230px;display:block}
+
+  footer{color:var(--muted);font-size:12px;text-align:center;padding:18px;border-top:1px solid var(--line)}
+  .err{color:var(--rose)}
+</style>
+</head>
+<body>
+  <header>
+    <h1>EvoRL<span class="dot">·</span>Mission Control</h1>
+    <span class="sub">Neuroevolution eines GRU-Agenten · Live-Telemetrie</span>
+    <span id="status" class="status-pill"><span class="led"></span><span id="statusText">verbinde…</span></span>
+    <button id="stopBtn" class="btn-stop" hidden>Training stoppen</button>
+  </header>
+
+  <main>
+    <section class="progress-wrap">
+      <div class="progress-head">
+        <div class="gen">Generation <b id="genNow" class="mono">–</b> <span class="pct">/ <span id="genTotal" class="mono">–</span></span></div>
+        <div class="pct"><span id="elapsed" class="mono">0s</span> · Curriculum <span id="curr" class="mono">0%</span></div>
+      </div>
+      <div class="bar"><span id="progressBar"></span></div>
+    </section>
+
+    <section class="cards">
+      <div class="card accent"><div class="label">Beste Fitness</div><div class="value mono" id="best">–</div></div>
+      <div class="card"><div class="label">Ø Fitness</div><div class="value mono" id="avg">–</div></div>
+      <div class="card teal"><div class="label">Ø Food / Episode</div><div class="value mono" id="avgFood">–</div></div>
+      <div class="card teal"><div class="label">Bestes Food</div><div class="value mono" id="bestFood">–</div></div>
+      <div class="card"><div class="label">Global Best</div><div class="value mono" id="gBest">–</div></div>
+      <div class="card"><div class="label">Mutation σ</div><div class="value mono" id="mut">–</div></div>
+      <div class="card"><div class="label">Diversität</div><div class="value mono" id="div">–</div></div>
+      <div class="card"><div class="label">Spezies</div><div class="value mono" id="species">–</div></div>
+    </section>
+
+    <section class="config">
+      <div class="config-head">
+        <h2>Parameter · Live-Tuning</h2>
+        <span class="hint">Werte eingeben und übernehmen — wirkt ab der nächsten Generation</span>
+      </div>
+      <div class="config-grid">
+        <div class="field">
+          <label for="cfgMutation">Mutation σ</label>
+          <input id="cfgMutation" type="number" step="0.001" min="0" inputmode="decimal" placeholder="z. B. 0.080">
+        </div>
+        <div class="field">
+          <label for="cfgFoodReward">Belohnung / Nahrung</label>
+          <input id="cfgFoodReward" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 60">
+        </div>
+        <div class="field">
+          <label for="cfgStepCost">Kosten / Schritt</label>
+          <input id="cfgStepCost" type="number" step="0.01" inputmode="decimal" placeholder="z. B. 0.05">
+        </div>
+        <div class="field">
+          <label for="cfgRewardWeight">Reward-Gewicht</label>
+          <input id="cfgRewardWeight" type="number" step="0.05" min="0" inputmode="decimal" placeholder="z. B. 0.30">
+        </div>
+        <div class="field">
+          <label for="cfgExploreBonus">Erkundungs-Bonus</label>
+          <input id="cfgExploreBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 150">
+        </div>
+        <div class="field">
+          <label for="cfgEfficiencyBonus">Effizienz-Bonus</label>
+          <input id="cfgEfficiencyBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 40">
+        </div>
+      </div>
+      <div class="config-actions">
+        <button id="cfgApply" class="btn-apply" type="button">Übernehmen</button>
+        <button id="cfgReset" class="btn-ghost" type="button">Zurücksetzen</button>
+        <span id="cfgMsg" class="cfg-msg"></span>
+      </div>
+    </section>
+
+    <section class="arena">
+      <div class="arena-head">
+        <div>
+          <h2>Bester Agent · Live-Replay</h2>
+          <p class="arena-explain">So bewegt sich der aktuell beste Agent. Das <b>türkise Quadrat</b> ist der Agent — er steuert sich selbst und versucht, möglichst viel <span class="hi-food">Nahrung</span> (gelbe Punkte) einzusammeln. Die türkise Spur zeigt seinen zuletzt gelaufenen Weg; graue Felder sind Wände. Die Episode läuft in Schleife.</p>
+        </div>
+        <div class="arena-meta mono"><span id="rGen">–</span></div>
+      </div>
+
+      <canvas id="arenaCanvas"></canvas>
+      <div class="arena-bar"><span id="arenaBar"></span></div>
+
+      <div class="arena-controls">
+        <label class="gen-select"><span>Ansicht</span>
+          <select id="rGenSelect"><option value="latest">Neueste (live folgen)</option></select>
+        </label>
+        <button id="rPlay" class="arena-btn" type="button">⏸ Pause</button>
+        <button id="rRestart" class="arena-btn" type="button">⟲ Neu starten</button>
+        <div class="seg" role="group" aria-label="Geschwindigkeit">
+          <button class="seg-btn" data-speed="0.5" type="button">0,5×</button>
+          <button class="seg-btn is-active" data-speed="1" type="button">1×</button>
+          <button class="seg-btn" data-speed="2" type="button">2×</button>
+        </div>
+        <span class="arena-stat mono">Schritt <span id="rStep">0</span><span class="dim">/<span id="rLen">0</span></span></span>
+        <span class="arena-stat mono"><span class="dot-food"></span><span id="rFood">0</span> Nahrung</span>
+      </div>
+
+      <div class="arena-legend">
+        <span><i class="sw agent"></i>Agent</span>
+        <span><i class="sw food"></i>Nahrung</span>
+        <span><i class="sw trail"></i>Weg</span>
+        <span><i class="sw wall"></i>Wand / Hindernis</span>
+      </div>
+    </section>
+
+    <section class="charts">
+      <div class="chart">
+        <h2>Fitness-Verlauf</h2>
+        <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Durchschnitt</span></div>
+        <canvas id="fitChart"></canvas>
+      </div>
+      <div class="chart">
+        <h2>Nahrung pro Episode</h2>
+        <div class="legend"><span><i style="background:var(--amber)"></i>Best Food</span><span><i style="background:var(--teal)"></i>Ø Food</span></div>
+        <canvas id="foodChart"></canvas>
+      </div>
+      <div class="chart">
+        <h2>Effizienz · Schritte / Nahrung</h2>
+        <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Ø</span><span style="margin-left:auto;color:var(--muted)">niedriger = besser</span></div>
+        <canvas id="spfChart"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <footer>Pollt <span class="mono">/api/status</span> · aktualisiert jede Sekunde · <span id="conn"></span></footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (n,d=1) => (n==null||isNaN(n)) ? "–" : Number(n).toLocaleString("de-DE",{maximumFractionDigits:d});
+const fmtTime = s => { s=Math.floor(s); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
+  return (h?h+"h ":"")+(h||m?m+"m ":"")+x+"s"; };
+const getCss = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+// ---- Schlanker Canvas-Linienchart (kein externes Framework) ----
+function drawChart(canvas, series){
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext("2d"); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const padL=46,padR=10,padT=10,padB=22;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+
+  let n=0,min=Infinity,max=-Infinity;
+  series.forEach(s=>{ n=Math.max(n,s.data.length);
+    s.data.forEach(v=>{ if(v<min)min=v; if(v>max)max=v; }); });
+  if(!isFinite(min)){ ctx.fillStyle="#6b7d90"; ctx.font="12px monospace";
+    ctx.fillText("Warte auf Daten…",padL,padT+plotH/2); return; }
+  if(min===max){ max=min+1; min-=1; }
+  const pad=(max-min)*0.08; min-=pad; max+=pad;
+
+  // Raster + Y-Achsen-Beschriftung
+  ctx.strokeStyle="#1f2b38"; ctx.fillStyle="#6b7d90";
+  ctx.font="11px ui-monospace,monospace"; ctx.lineWidth=1;
+  for(let g=0;g<=4;g++){
+    const y=padT+plotH*g/4, val=max-(max-min)*g/4;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText(fmt(val,0),4,y+3);
+  }
+  const X=i=> padL + (n<=1?0:plotW*i/(n-1));
+  const Y=v=> padT + plotH*(1-(v-min)/(max-min));
+
+  series.forEach(s=>{
+    if(!s.data.length) return;
+    ctx.beginPath(); ctx.strokeStyle=s.color; ctx.lineWidth=1.8;
+    s.data.forEach((v,i)=>{ const x=X(i),y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+    // letzter Punkt markiert
+    const li=s.data.length-1;
+    ctx.fillStyle=s.color; ctx.beginPath();
+    ctx.arc(X(li),Y(s.data[li]),2.6,0,7); ctx.fill();
+  });
+}
+
+let lastData=null;
+function render(d){
+  lastData=d;
+  // Status
+  const pill=$("status"), txt=$("statusText");
+  pill.className="status-pill"+(d.finished?" done":(d.running?" live":""));
+  txt.textContent = d.finished ? "abgeschlossen" : (d.running ? "läuft" : "wartet");
+
+  // Stop-Button: nur sichtbar, solange ein Lauf aktiv ist.
+  const stopBtn=$("stopBtn");
+  if(d.running && !d.finished){
+    stopBtn.hidden=false;
+    stopBtn.disabled = !!d.stopRequested;
+    stopBtn.textContent = d.stopRequested ? "Wird gestoppt…" : "Training stoppen";
+  } else {
+    stopBtn.hidden=true;
+  }
+
+  // Parameter-Felder einmalig aus dem Backend vorbefuellen (sofern es 'config' liefert).
+  if(d.config){ lastCfg=d.config; if(!cfgHydrated){ fillConfig(d.config); cfgHydrated=true; } }
+
+  $("genNow").textContent=fmt(d.generation,0);
+  $("genTotal").textContent=fmt(d.totalGenerations,0);
+  const pct = d.totalGenerations? Math.min(100,100*d.generation/d.totalGenerations):0;
+  $("progressBar").style.width=pct+"%";
+  $("elapsed").textContent=fmtTime(d.elapsedSeconds);
+  $("curr").textContent=fmt(d.curriculum*100,0)+"%";
+
+  $("best").textContent=fmt(d.bestFitness,0);
+  $("avg").textContent=fmt(d.avgFitness,0);
+  $("avgFood").textContent=fmt(d.avgFood,1);
+  $("bestFood").textContent=fmt(d.bestFood,0);
+  $("gBest").textContent=fmt(d.globalBestFitness,0);
+  $("mut").textContent=fmt(d.mutation,3);
+  $("div").textContent=fmt(d.diversity,3);
+  $("species").textContent=fmt(d.species,0);
+
+  const H=d.history||{};
+  drawChart($("fitChart"),[
+    {data:H.best||[],color:getCss('--amber')},
+    {data:H.avg||[], color:getCss('--teal')},
+  ]);
+  drawChart($("foodChart"),[
+    {data:H.bestFood||[],color:getCss('--amber')},
+    {data:H.avgFood||[], color:getCss('--teal')},
+  ]);
+  drawChart($("spfChart"),[
+    {data:H.bestSpf||[],color:getCss('--amber')},
+    {data:H.avgSpf||[], color:getCss('--teal')},
+  ]);
+}
+
+// ---- Live-Replay des besten Agenten ----
+let replay=null, rFrame=0, rEvtPtr=0, rEaten=0, rFoodSet=null;
+let rPaused=false, rSpeed=1, rLastStep=0, _arenaCss=0;
+const R_STEP_MS=60;            // Basis-Tempo bei 1x (~16 Schritte/s)
+const TRAIL_LEN=22;            // Laenge der verblassenden Spur
+
+// Empfangene Replays werden gesammelt; die Anzeige bleibt auf der gewaehlten
+// Generation stehen und wechselt NICHT automatisch mit. "Neueste folgen" ist
+// optional ueber die Auswahl aktivierbar.
+const replayCache=new Map();   // generation -> Replay-Objekt
+let selectedGen=null;          // aktuell angezeigte Generation
+let followLatest=false;        // true = immer die neueste anzeigen
+
+function maxGen(){ let m=null; for(const g of replayCache.keys()) if(m==null||g>m) m=g; return m; }
+
+// Holt das aktuell vom Backend bereitgestellte Replay und legt es im Cache ab,
+// ohne die laufende Anzeige zu stoeren (ausser im "Neueste folgen"-Modus).
+async function pollReplay(){
+  try{
+    const r=await fetch("/api/replay",{cache:"no-store"});
+    const rep=await r.json();
+    if(!rep.frames || !rep.frames.length || rep.generation==null) return;
+    const g=rep.generation;
+    const isNew=!replayCache.has(g);
+    replayCache.set(g, rep);
+    if(isNew) rebuildGenSelect();
+    if(selectedGen==null) setActiveReplay(g);            // erste Generation einrasten
+    else if(followLatest){ const n=maxGen(); if(n!==selectedGen) setActiveReplay(n); }
+  }catch(e){ /* Replay noch nicht verfuegbar */ }
+}
+
+function setActiveReplay(g){
+  if(!replayCache.has(g)) return;
+  if(g===selectedGen && replay) return;                  // schon aktiv -> nicht neu starten
+  selectedGen=g;
+  replay=replayCache.get(g);
+  resetReplay();
+  const sel=$("rGenSelect"); if(sel) sel.value = followLatest ? "latest" : String(g);
+}
+
+function rebuildGenSelect(){
+  const sel=$("rGenSelect"); if(!sel) return;
+  const gens=[...replayCache.keys()].sort((a,b)=>a-b);
+  sel.innerHTML =
+    '<option value="latest">Neueste (live folgen)</option>' +
+    gens.map(g=>'<option value="'+g+'">Generation '+g+'</option>').join("");
+  sel.value = followLatest ? "latest" : (selectedGen!=null ? String(selectedGen) : "latest");
+}
+
+function resetReplay(){
+  rFrame=0; rEvtPtr=0; rEaten=0;
+  rFoodSet=new Set(replay ? replay.food0 : []);
+}
+function advanceReplay(){
+  rFrame++;
+  if(rFrame>=replay.frames.length){ resetReplay(); return; }   // Schleife
+  while(rEvtPtr<replay.events.length && replay.events[rEvtPtr][0]===rFrame){
+    const e=replay.events[rEvtPtr++];
+    if(e[1]===1) rFoodSet.add(e[2]);
+    else { rFoodSet.delete(e[2]); rEaten++; }                  // Entfernen = gefressen
+  }
+}
+
+// Canvas nur bei tatsaechlicher Groessenaenderung neu dimensionieren (sonst nur clearen).
+function arenaCtx(cv){
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth||460, h=cv.clientHeight||w;
+  const key=w+"x"+h;
+  if(key!==_arenaCss){ _arenaCss=key; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h};
+}
+
+function drawArena(ts){
+  const cv=$("arenaCanvas"); if(!cv) return;
+  const {ctx,w,h}=arenaCtx(cv);
+  ctx.clearRect(0,0,w,h);
+
+  if(!replay){
+    ctx.fillStyle="#6b7d90"; ctx.font='13px ui-monospace,monospace'; ctx.textAlign="center";
+    ctx.fillText("warte auf den ersten Agenten…", w/2, h/2);
+    ctx.textAlign="start"; return;
+  }
+
+  const t=ts||0;
+  const W=replay.w, Hc=replay.h||W;
+  const cs=Math.min(w/W, h/Hc);
+  const ox=(w-W*cs)/2, oy=(h-Hc*cs)/2;       // zentriert (auch bei nicht-quadratisch)
+  const px=(x)=>ox+x*cs, py=(y)=>oy+y*cs;
+  const teal=getCss("--teal"), amber=getCss("--amber");
+
+  // dezentes Raster
+  ctx.strokeStyle="rgba(255,255,255,.035)"; ctx.lineWidth=1; ctx.beginPath();
+  for(let i=0;i<=W;i++){ ctx.moveTo(px(i),py(0)); ctx.lineTo(px(i),py(Hc)); }
+  for(let j=0;j<=Hc;j++){ ctx.moveTo(px(0),py(j)); ctx.lineTo(px(W),py(j)); }
+  ctx.stroke();
+
+  // Waende (abgerundet, mit feiner Lichtkante fuer Tiefe)
+  for(const idx of replay.walls){
+    const x=idx%W, y=(idx/W)|0;
+    ctx.fillStyle="#23303d";
+    roundRect(ctx, px(x)+0.5, py(y)+0.5, cs-1, cs-1, Math.max(2,cs*0.18)); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,.045)";
+    roundRect(ctx, px(x)+0.5, py(y)+0.5, cs-1, Math.max(1.5,cs*0.3), Math.max(2,cs*0.18)); ctx.fill();
+  }
+
+  // Nahrung: weicher Glow + sanfter Puls
+  const pulse=0.5+0.5*Math.sin(t/420);
+  ctx.save();
+  ctx.shadowColor=amber; ctx.shadowBlur=cs*0.55; ctx.fillStyle=amber;
+  for(const idx of rFoodSet){
+    const x=idx%W, y=(idx/W)|0;
+    ctx.beginPath(); ctx.arc(px(x+0.5),py(y+0.5),cs*(0.24+0.05*pulse),0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  // Weg / verblassende Spur
+  const from=Math.max(1,rFrame-TRAIL_LEN);
+  for(let k=from;k<=rFrame;k++){
+    const f=replay.frames[k]; if(!f) continue;
+    const a=(k-(rFrame-TRAIL_LEN))/TRAIL_LEN;       // 0..1, juenger = staerker
+    ctx.fillStyle="rgba(45,212,191,"+(0.04+0.20*a).toFixed(3)+")";
+    ctx.beginPath(); ctx.arc(px(f[0]+0.5),py(f[1]+0.5),cs*(0.09+0.07*a),0,Math.PI*2); ctx.fill();
+  }
+
+  // Agent (Glow) + Blickrichtung
+  const f=replay.frames[rFrame];
+  if(f){
+    ctx.save();
+    ctx.shadowColor=teal; ctx.shadowBlur=cs*0.7; ctx.fillStyle=teal;
+    const p=cs*0.16;
+    roundRect(ctx, px(f[0])+p, py(f[1])+p, cs-2*p, cs-2*p, Math.max(2,cs*0.26)); ctx.fill();
+    ctx.restore();
+    const prev=replay.frames[rFrame-1];
+    if(prev){
+      const dx=Math.sign(f[0]-prev[0]), dy=Math.sign(f[1]-prev[1]);
+      if(dx||dy){
+        ctx.fillStyle="#06231f";
+        ctx.beginPath();
+        ctx.arc(px(f[0]+0.5)+dx*cs*0.18, py(f[1]+0.5)+dy*cs*0.18, Math.max(1.5,cs*0.08),0,Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // HUD
+  $("rGen").textContent="Gen "+replay.generation;
+  $("rStep").textContent=rFrame;
+  $("rLen").textContent=replay.frames.length-1;
+  $("rFood").textContent=rEaten;
+  const bar=$("arenaBar"), tot=replay.frames.length-1;
+  if(bar) bar.style.width=(tot? 100*rFrame/tot : 0)+"%";
+}
+
+// Eine durchgehende Animationsschleife: weicher Glow/Puls + tempo-/pausierbares Schalten der Schritte.
+function arenaLoop(ts){
+  if(replay){
+    if(!rPaused && ts-rLastStep >= R_STEP_MS/rSpeed){ rLastStep=ts; advanceReplay(); }
+    drawArena(ts);
+  }
+  requestAnimationFrame(arenaLoop);
+}
+
+// ---- Steuerung der Arena ----
+$("rPlay").addEventListener("click", ()=>{
+  rPaused=!rPaused;
+  $("rPlay").textContent = rPaused ? "▶ Weiter" : "⏸ Pause";
+});
+$("rRestart").addEventListener("click", ()=>{ if(replay) resetReplay(); });
+document.querySelectorAll(".seg-btn").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    rSpeed=parseFloat(b.dataset.speed);
+    document.querySelectorAll(".seg-btn").forEach(x=>x.classList.toggle("is-active", x===b));
+  });
+});
+// Generationsauswahl: manuell waehlen, ansonsten bleibt die Anzeige stehen.
+$("rGenSelect").addEventListener("change", (e)=>{
+  const v=e.target.value;
+  if(v==="latest"){ followLatest=true; const n=maxGen(); if(n!=null) setActiveReplay(n); }
+  else { followLatest=false; setActiveReplay(parseInt(v,10)); }
+});
+
+async function poll(){
+  try{
+    const r=await fetch("/api/status",{cache:"no-store"});
+    const d=await r.json();
+    $("conn").textContent="";
+    render(d);
+    pollReplay();              // Replays sammeln; Anzeige wechselt nur auf Wunsch
+  }catch(e){
+    $("conn").innerHTML='<span class="err">keine Verbindung zum Trainings-Backend</span>';
+  }
+}
+
+// Stop-Button: sendet den Abbruchwunsch an das Backend.
+// Der tatsaechliche Zustand kommt anschliessend ueber /api/status zurueck.
+$("stopBtn").addEventListener("click", async ()=>{
+  const b=$("stopBtn"); b.disabled=true; b.textContent="Wird gestoppt…";
+  try{ await fetch("/api/stop",{method:"POST"}); }
+  catch(e){ /* Backend meldet den Stop ueber /api/status zurueck */ }
+});
+
+// ---- Parameter-Panel (Live-Tuning) ----
+// Mapping JSON-Schluessel -> Feld-ID. Diese Schluessel gehen an POST /api/config.
+const CFG_FIELDS = {
+  mutation:        "cfgMutation",
+  foodReward:      "cfgFoodReward",
+  stepCost:        "cfgStepCost",
+  rewardWeight:    "cfgRewardWeight",
+  exploreBonus:    "cfgExploreBonus",
+  efficiencyBonus: "cfgEfficiencyBonus",
+};
+let cfgHydrated=false, lastCfg=null;
+
+function fillConfig(cfg){
+  if(!cfg) return;
+  for(const [key,id] of Object.entries(CFG_FIELDS)){
+    const el=$(id);
+    if(!el || el===document.activeElement) continue;   // nicht ueberschreiben, waehrend getippt wird
+    if(cfg[key]!=null) el.value=cfg[key];
+  }
+}
+function readConfig(){
+  const out={};
+  for(const [key,id] of Object.entries(CFG_FIELDS)){
+    const el=$(id);
+    if(el && el.value!=="" && !isNaN(parseFloat(el.value))) out[key]=parseFloat(el.value);
+  }
+  return out;
+}
+function cfgMessage(text,kind){
+  const m=$("cfgMsg"); m.textContent=text||""; m.className="cfg-msg"+(kind?(" "+kind):"");
+  clearTimeout(cfgMessage._t);
+  if(text) cfgMessage._t=setTimeout(()=>{ m.textContent=""; m.className="cfg-msg"; },4000);
+}
+
+$("cfgApply").addEventListener("click", async ()=>{
+  const body=readConfig();
+  if(!Object.keys(body).length){ cfgMessage("Keine Werte eingegeben.","err"); return; }
+  const btn=$("cfgApply"); btn.disabled=true;
+  try{
+    const r=await fetch("/api/config",{method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    cfgMessage("Parameter übernommen — wirkt ab der nächsten Generation.","ok");
+  }catch(e){
+    cfgMessage("Konnte Parameter nicht senden (Backend /api/config?).","err");
+  }finally{ btn.disabled=false; }
+});
+
+$("cfgReset").addEventListener("click", ()=>{
+  if(lastCfg){ fillConfig(lastCfg); cfgMessage("Auf Backend-Werte zurückgesetzt.",""); }
+  else cfgMessage("Keine Backend-Werte verfügbar.","err");
+});
+
+window.addEventListener("resize",()=>{ if(lastData) render(lastData); });
+poll(); setInterval(poll,1000);
+requestAnimationFrame(arenaLoop);   // weiche, tempo-/pausierbare Replay-Animation
+</script>
+</body>
+</html>
+)EVORLHTML";
