@@ -195,6 +195,12 @@ void Evolution::train() {
     if (monitor_) monitor_->setRunning(true);
 
     for (generation = 0; generation < GENERATIONS; generation++) {
+        // ---- Stop-Button Poll ----
+        if (monitor_ && monitor_->stopRequested()) {
+            cout << "\n[Training unterbrochen durch Stop-Button bei Generation " << (generation + 1) << "]\n";
+            break;
+        }
+
         float progress = float(generation) / GENERATIONS;
 
         // Curriculum
@@ -291,7 +297,7 @@ void Evolution::train() {
             rec.diversity = diversity;
             rec.species = (int)speciesRepresentatives.size();
 
-            // ---------- GEÄNDERT: Replay nur alle 10 Generationen ----------
+            // ---------- GEï¿½NDERT: Replay nur alle 10 Generationen ----------
             if (generation % 10 == 0) {
                 
             }
