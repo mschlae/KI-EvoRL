@@ -95,6 +95,8 @@ void World::reset() {
 
     do { agentX = randInt(1, GRID_W - 2); agentY = randInt(1, GRID_H - 2); } while (grid[agentY * GRID_W + agentX] != EMPTY);
 
+    // Read runtime parameters
+    auto rcfg = getRuntimeConfig();
     energy = START_ENERGY; alive = true; steps = 0; foodEaten = 0; totalReward = 0;
     visited.reset();
     visited.set(agentY * GRID_W + agentX);
@@ -192,6 +194,7 @@ array<float, INPUTS> World::getSensors() {
 }
 
 float World::executeAction(int action) {
+    auto rcfg = getRuntimeConfig();
     lastAction = action;
     int dx = 0, dy = 0;
     switch (action) {
@@ -202,7 +205,7 @@ float World::executeAction(int action) {
     }
     int nx = agentX + dx, ny = agentY + dy;
     int nIdx = ny * GRID_W + nx;
-    float reward = -STEP_COST;
+    float reward = -rcfg.stepCost;
 
     if (grid[nIdx] == WALL || grid[nIdx] == OBSTACLE) {
         reward += WALL_PENALTY;
@@ -217,7 +220,7 @@ float World::executeAction(int action) {
 
         // Erkundungsbonus
         if (!visited.test(curIdx)) {
-            reward += EXPLORATION_BONUS;
+            reward += rcfg.exploreBonus;
             visited.set(curIdx);
             int zx = agentX / 8, zy = agentY / 8;
             if (zx < 6 && zy < 6 && !visitedZones[zy][zx]) {
@@ -240,10 +243,10 @@ float World::executeAction(int action) {
 
         // Food fressen
         if (grid[curIdx] == FOOD) {
-            reward += FOOD_REWARD;
+            reward += rcfg.foodReward;
             removeFood(curIdx);
             foodEaten++;
-            energy += FOOD_REWARD * 0.4f; // Energie regenerieren beim Essen
+            energy += rcfg.foodReward * 0.4f; // Energie regenerieren beim Essen
             prevFoodDist = nearestFoodDist();
             if (randFloat(0, 1) < FOOD_RESPAWN_RATE) {
                 int fx, fy, fi;

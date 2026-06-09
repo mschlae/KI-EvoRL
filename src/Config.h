@@ -80,3 +80,19 @@ constexpr int   WEB_SERVER_PORT = 8080;
 // ----- Globaler Curriculum-Schwierigkeitsgrad -----
 // Wird von Evolution::train() gesetzt und von World::reset() gelesen.
 extern float g_curriculum_difficulty;
+
+// ----- Laufzeit-Parameter (können per Dashboard geändert werden) -----
+// Diese Werte sind veränderlich und werden zur Laufzeit gelesen.
+struct RuntimeConfig {
+	float mutation = MUTATION_STRENGTH_INIT; // initiale Mutationsstärke
+	float foodReward = FOOD_REWARD;
+	float stepCost = STEP_COST;
+	float rewardWeight = 0.3f; // Anteil von totalReward in Fitness
+	float exploreBonus = EXPLORATION_BONUS;
+	float efficiencyBonus = 1.0f; // Skaliert den Effizienz-Bonus in Fitness
+};
+
+// Liefert eine threadsichere Kopie der aktuellen Laufzeitkonfiguration.
+RuntimeConfig getRuntimeConfig();
+// Setzt die komplette Laufzeitkonfiguration (threadsicher).
+void setRuntimeConfig(const RuntimeConfig& cfg);

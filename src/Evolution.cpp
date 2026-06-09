@@ -35,26 +35,30 @@ float Evolution::computeBaseFitness(const World& w) {
     float visitedFrac = w.visited.count() / float((GRID_W - 2) * (GRID_H - 2));
 
     // Food-Hauptsignal: streng monoton steigend, leicht abnehmend
+    // Use runtime-configurable food reward scaling
+    auto rcfg = getRuntimeConfig();
+    float baseUnit = rcfg.foodReward > 0 ? rcfg.foodReward : 60.0f;
     float foodBonus;
-    if (w.foodEaten <= 20) foodBonus = w.foodEaten * 60.0f;
-    else                   foodBonus = 20 * 60.0f + (w.foodEaten - 20) * 30.0f;
+    if (w.foodEaten <= 20) foodBonus = w.foodEaten * baseUnit;
+    else                   foodBonus = 20 * baseUnit + (w.foodEaten - 20) * (baseUnit * 0.5f);
 
     // Effizienz NUR als Tiebreaker, hart an tatsaechliche Leistung gekoppelt.
     // Gating (>=6 Food UND >=80 Schritte) verhindert den "1-Food-dann-sterben"-Exploit.
     float efficiencyBonus = 0.0f;
     if (w.foodEaten >= 6 && w.steps >= 80) {
         float foodRate = float(w.foodEaten) / w.steps;
-        efficiencyBonus = min(foodRate, 0.2f) * w.foodEaten * 40.0f;
+        efficiencyBonus = min(foodRate, 0.2f) * w.foodEaten * 40.0f * rcfg.efficiencyBonus;
     }
 
     // Erkundung: nachrangig
-    float exploreBonus = visitedFrac * 150.0f;
+    float exploreBonus = visitedFrac * (rcfg.exploreBonus > 0 ? rcfg.exploreBonus * 750.0f : 150.0f);
 
     // Kleiner Start-Lerngradient (gedeckelt -> kein Dauerwandern)
     float survivalSeed = min(w.steps, 300) * 0.02f;
 
     // totalReward (Shaping) nur gedaempft einfliessen lassen.
-    return 0.3f * w.totalReward + foodBonus + efficiencyBonus + exploreBonus + survivalSeed;
+    // rewardWeight skaliert den Anteil von totalReward am BaseFitness
+    return rcfg.rewardWeight * w.totalReward + foodBonus + efficiencyBonus + exploreBonus + survivalSeed;
 }
 
 float Evolution::evaluate(Brain& brain, bool visualize, bool recordNovelty,

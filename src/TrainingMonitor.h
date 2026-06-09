@@ -76,4 +76,10 @@ private:
     std::chrono::steady_clock::time_point start_;
     std::vector<GenRecord> history_; // gedeckelt, fuer Charts
     std::string replay_;             // letzte Best-Agent-Episode (JSON)
+
+public:
+    // Liefert die aktuelle Runtime-Config als JSON (für GET /api/config)
+    std::string configJson() const;
+    // Wendet JSON-Config (vom Webserver empfangen) an und gibt Erfolg zurück
+    bool applyConfigJson(const std::string& jsonStr);
 };

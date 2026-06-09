@@ -163,6 +163,28 @@ void HttpServer::handleClient(long long sockLL) {
     else if (path == "/api/replay") {
         sendResponse(s, "200 OK", "application/json", monitor_.replayJson());
     }
+    else if (path == "/api/config") {
+        if (method == "GET") {
+            // Rückgabe der aktuellen Runtime-Config als JSON
+            sendResponse(s, "200 OK", "application/json", monitor_.configJson());
+        }
+        else if (method == "POST") {
+            // Einfache Body-Extraktion: Suche nach CRLF CRLF und parse JSON substring
+            const char* bodyStart = strstr(buf, "\r\n\r\n");
+            if (bodyStart) {
+                bodyStart += 4;
+                std::string body(bodyStart);
+                // Delegiere an Monitor zum Setzen der Laufzeitkonfiguration
+                bool ok = monitor_.applyConfigJson(body);
+                if (ok) sendResponse(s, "200 OK", "application/json", "{\"ok\":true}");
+                else    sendResponse(s, "400 Bad Request", "application/json", "{\"ok\":false}");
+            } else {
+                sendResponse(s, "400 Bad Request", "application/json", "{\"ok\":false}");
+            }
+        } else {
+            sendResponse(s, "405 Method Not Allowed", "text/plain; charset=utf-8", "Method Not Allowed");
+        }
+    }
     else if (path == "/api/stop" && method == "POST") {
         monitor_.requestStop();
         sendResponse(s, "200 OK", "application/json", "{\"ok\":true}");
