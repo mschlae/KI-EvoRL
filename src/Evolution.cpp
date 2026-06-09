@@ -7,12 +7,9 @@
 #include "TrainingMonitor.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <iostream>
 #include <numeric>
 #include <sstream>
-#include <thread>
 
 #include <omp.h>
 
@@ -24,8 +21,6 @@ Evolution::Evolution()
     boostActive(false), boost2Active(false) {
     population.resize(POPULATION_SIZE);
     globalBest.baseFitness = globalBestBase.baseFitness = -1e30f;
-    cout << "Optimierte Evolution v4. Population: " << POPULATION_SIZE << "\n";
-    cout << "INPUTS=" << INPUTS << " HIDDEN=" << HIDDEN << "\n";
 }
 
 // --------------------------------------------------------
@@ -57,9 +52,12 @@ float Evolution::computeBaseFitness(const World& w) {
     return 0.3f * w.totalReward + foodBonus + efficiencyBonus + exploreBonus + survivalSeed;
 }
 
-float Evolution::evaluate(Brain& brain, bool visualize, bool recordNovelty,
+// Bewertet ein Brain ueber EVAL_REPEATS Episoden (Common Random Numbers).
+// Hinweis: Reine Rechenfunktion - keine Ausgabe, keine Visualisierung.
+// Das visuelle Feedback laeuft ausschliesslich ueber recordReplay() -> Monitor.
+float Evolution::evaluate(Brain& brain, bool /*visualize*/, bool /*recordNovelty*/,
     const uint64_t* seeds) {
-    int reps = visualize ? 1 : EVAL_REPEATS;
+    int reps = EVAL_REPEATS;
     float totBase = 0; int totSteps = 0, totFood = 0;
     float zoneAcc[36] = {};
     for (int r = 0; r < reps; r++) {
@@ -68,7 +66,7 @@ float Evolution::evaluate(Brain& brain, bool visualize, bool recordNovelty,
         World world;
         world.earlyStopLimit = earlyStopLimit;
         brain.resetHidden();
-        while (world.alive && world.steps < MAX_EPISODE_STEPS) {
+        while (world.alive && world.steps < MAX_STEPS) {
             auto sens = world.getSensors();
             float logits[OUTPUTS];
             brain.forward(sens, logits);
@@ -76,16 +74,6 @@ float Evolution::evaluate(Brain& brain, bool visualize, bool recordNovelty,
             float rv = randFloat(0, 1); int act = OUTPUTS - 1; float cum = 0;
             for (int i = 0; i < OUTPUTS; i++) { cum += logits[i]; if (rv < cum) { act = i; break; } }
             world.executeAction(act);
-            if (visualize && r == 0) {
-                cout << "\033[2J\033[1;1H";
-                cout << "=== BESTER AGENT ===\n";
-                cout << "Step:" << world.steps << "  Energy:" << world.energy
-                    << "  Food:" << world.foodEaten << "  Reward:" << world.totalReward << "\n";
-                const char* as[] = { "<", "->", "^", "v" };
-                cout << "Action:" << as[act] << "\n";
-                world.display();
-                this_thread::sleep_for(chrono::milliseconds(25));
-            }
         }
         totBase += computeBaseFitness(world);
         totSteps += world.steps; totFood += world.foodEaten;
@@ -192,9 +180,15 @@ int Evolution::tournamentSelect(const vector<int>& idxs) {
 }
 
 void Evolution::train() {
+    // Replay nur in diesem Intervall aufzeichnen (Dashboard-Vorschau).
+    constexpr int kReplayInterval = 10;
+
     if (monitor_) monitor_->setRunning(true);
 
     for (generation = 0; generation < GENERATIONS; generation++) {
+        // Vom Dashboard angeforderten Abbruch (Stop-Button) respektieren.
+        if (monitor_ && monitor_->stopRequested()) break;
+
         float progress = float(generation) / GENERATIONS;
 
         // Curriculum
@@ -249,33 +243,17 @@ void Evolution::train() {
         float diversity = measureDiversity();
         bool inject = boost2Active || (diversity < DIVERSITY_INJECT_THRESHOLD);
 
-        // Statistiken
-        float avgFit = 0; int avgStep = 0, avgFood = 0;
-        for (auto& ind : population) { avgFit += ind.fitness; avgStep += ind.steps; avgFood += ind.food; }
-        avgFit /= POPULATION_SIZE; avgStep /= POPULATION_SIZE; avgFood /= POPULATION_SIZE;
-        if (avgFood < 1) avgFood = 1;
-
-        if (avgFit > 5000) {
-            generation = GENERATIONS;
-        }
-        cout << "Gen " << generation + 1 << "/" << GENERATIONS
-            << " | Score=" << (avgFit + avgFood * 5 + avgStep) / 100
-            << " | Best=" << population[0].fitness
-            << " | AvgFit=" << avgFit
-            << " | AvgFood=" << avgFood
-            << " | AvgSteps=" << avgStep
-            << " | BestFood=" << population[0].food
-            << " | SPF=" << (float)avgStep / (float)avgFood
-            << " | Mut=" << mutationStrength
-            << " | Div=" << diversity;
-        if (inject) cout << " [INJECT]";
-        cout << "\n";
-
         // ---- Live-Status an das Dashboard melden ----
         if (monitor_) {
+            // Statistiken (nur fuer die Anzeige berechnet)
+            float avgFit = 0; int avgStep = 0, avgFood = 0;
+            for (auto& ind : population) { avgFit += ind.fitness; avgStep += ind.steps; avgFood += ind.food; }
+            avgFit /= POPULATION_SIZE; avgStep /= POPULATION_SIZE; avgFood /= POPULATION_SIZE;
+            if (avgFood < 1) avgFood = 1;
+
             // SPF = Schritte pro Nahrung (niedriger = besser), zur Anzeige gedeckelt.
             auto cap = [](float v) { return v > 400.0f ? 400.0f : v; };
-            float avgSpf = cap((float)avgStep / (float)avgFood);
+            float avgSpf = (float)avgStep / (float)avgFood;
             float bestSpf = cap(population[0].food > 0
                 ? (float)population[0].steps / (float)population[0].food
                 : (float)population[0].steps);
@@ -292,8 +270,8 @@ void Evolution::train() {
             rec.diversity = diversity;
             rec.species = (int)speciesRepresentatives.size();
 
-            // ---------- GEÄNDERT: Replay nur alle 20 Generationen ----------
-            if (generation % 10 == 0) {
+            // Replay nur alle kReplayInterval Generationen aufzeichnen.
+            if (generation % kReplayInterval == 0) {
                 monitor_->setReplay(recordReplay(population[0], genSeeds[0], generation + 1));
             }
 
@@ -374,11 +352,10 @@ void Evolution::train() {
         population = move(next);
     }
 
+    // Egal ob regulaer durchgelaufen oder per Stop-Button beendet:
+    // den Endzustand an das Dashboard melden. Der beste Agent liegt in
+    // globalBest / globalBestBase und kann vom Monitor ausgelesen werden.
     if (monitor_) monitor_->setFinished();
-
-    cout << "\n=== DEMO des besten Basis-Agenten ===\n";
-    set_local_seed(42766);
-    evaluate(globalBestBase, true, false);
 }
 
 // --------------------------------------------------------

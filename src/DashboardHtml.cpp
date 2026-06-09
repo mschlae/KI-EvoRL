@@ -58,6 +58,20 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
   .status-pill.done{color:var(--amber);border-color:#3a3017}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,212,191,.45)}70%{box-shadow:0 0 0 8px rgba(45,212,191,0)}100%{box-shadow:0 0 0 0 rgba(45,212,191,0)}}
 
+  /* Stop-Button (aktive Steuerung) */
+  .btn-stop{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 16px;border:1px solid #5b2330;border-radius:999px;
+    background:linear-gradient(180deg,#2a151b,#1c0f13);color:var(--rose);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;
+    text-transform:uppercase;cursor:pointer;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .btn-stop:hover{background:var(--rose);color:#fff;border-color:var(--rose)}
+  .btn-stop:disabled{opacity:.6;cursor:default;color:var(--muted);border-color:var(--line);background:var(--panel-2)}
+  .btn-stop:disabled:hover{background:var(--panel-2);color:var(--muted)}
+  .btn-stop[hidden]{display:none}
+
   main{padding:24px 28px 48px;max-width:1280px;margin:0 auto}
 
   /* Generations-Fortschritt */
@@ -120,6 +134,7 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
     <h1>EvoRL<span class="dot">·</span>Mission Control</h1>
     <span class="sub">Neuroevolution eines GRU-Agenten · Live-Telemetrie</span>
     <span id="status" class="status-pill"><span class="led"></span><span id="statusText">verbinde…</span></span>
+    <button id="stopBtn" class="btn-stop" hidden>Training stoppen</button>
   </header>
 
   <main>
@@ -234,6 +249,16 @@ function render(d){
   pill.className="status-pill"+(d.finished?" done":(d.running?" live":""));
   txt.textContent = d.finished ? "abgeschlossen" : (d.running ? "läuft" : "wartet");
 
+  // Stop-Button: nur sichtbar, solange ein Lauf aktiv ist.
+  const stopBtn=$("stopBtn");
+  if(d.running && !d.finished){
+    stopBtn.hidden=false;
+    stopBtn.disabled = !!d.stopRequested;
+    stopBtn.textContent = d.stopRequested ? "Wird gestoppt…" : "Training stoppen";
+  } else {
+    stopBtn.hidden=true;
+  }
+
   $("genNow").textContent=fmt(d.generation,0);
   $("genTotal").textContent=fmt(d.totalGenerations,0);
   const pct = d.totalGenerations? Math.min(100,100*d.generation/d.totalGenerations):0;
@@ -268,13 +293,7 @@ function render(d){
 }
 
 // ---- Live-Replay des besten Agenten ----
-let 
-
-
-
-
-
-=null, rFrame=0, rEvtPtr=0, rEaten=0, rFoodSet=null, lastReplayGen=-1;
+let replay=null, rFrame=0, rEvtPtr=0, rEaten=0, rFoodSet=null, lastReplayGen=-1;
 
 async function loadReplay(gen){
   if(!gen || gen===lastReplayGen) return;        // nur bei neuer Generation neu laden
@@ -336,6 +355,15 @@ async function poll(){
     $("conn").innerHTML='<span class="err">keine Verbindung zum Trainings-Backend</span>';
   }
 }
+
+// Stop-Button: sendet den Abbruchwunsch an das Backend.
+// Der tatsaechliche Zustand kommt anschliessend ueber /api/status zurueck.
+$("stopBtn").addEventListener("click", async ()=>{
+  const b=$("stopBtn"); b.disabled=true; b.textContent="Wird gestoppt…";
+  try{ await fetch("/api/stop",{method:"POST"}); }
+  catch(e){ /* Backend meldet den Stop ueber /api/status zurueck */ }
+});
+
 window.addEventListener("resize",()=>{ if(lastData) render(lastData); drawArena(); });
 poll(); setInterval(poll,1000);
 setInterval(stepReplay,45);   // ~22 fps Animation
