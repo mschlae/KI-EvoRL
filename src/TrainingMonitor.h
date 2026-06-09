@@ -37,8 +37,19 @@ public:
         bool  injecting,
         int   totalGenerations);
 
-    void setRunning(bool r) { running_.store(r); }
+    // Beim Start eines Laufs aufrufen. Setzt das Stop-Flag zurueck, damit ein
+    // erneuter Lauf nicht sofort wieder abbricht.
+    void setRunning(bool r) {
+        running_.store(r);
+        if (r) stopRequested_.store(false);
+    }
     void setFinished();
+
+    // ---- Aktive Steuerung vom Dashboard ----
+    // Vom GUI-/Webserver-Thread aufgerufen (Stop-Button).
+    void requestStop() { stopRequested_.store(true); }
+    // Vom Trainingsthread gepollt -> Schleife bricht sauber ab.
+    bool stopRequested() const { return stopRequested_.load(); }
 
     // Aufgezeichnete Episode des aktuell besten Agenten (JSON, vom Training gesetzt).
     void setReplay(std::string json);
@@ -60,6 +71,7 @@ private:
 
     std::atomic<bool> running_{ false };
     std::atomic<bool> finished_{ false };
+    std::atomic<bool> stopRequested_{ false }; // vom Stop-Button gesetzt
 
     std::chrono::steady_clock::time_point start_;
     std::vector<GenRecord> history_; // gedeckelt, fuer Charts

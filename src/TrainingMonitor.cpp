@@ -6,11 +6,12 @@
 #include <sstream>
 
 namespace {
-constexpr size_t MAX_HISTORY = 2000; // gedeckelt, damit das JSON nicht explodiert
+    constexpr size_t MAX_HISTORY = 2000; // gedeckelt, damit das JSON nicht explodiert
 }
 
 TrainingMonitor::TrainingMonitor()
-    : start_(std::chrono::steady_clock::now()) {}
+    : start_(std::chrono::steady_clock::now()) {
+}
 
 void TrainingMonitor::update(const GenRecord& rec,
     float globalBestFitness,
@@ -60,8 +61,9 @@ std::string TrainingMonitor::toJson() const {
     os.precision(3);
 
     os << '{';
-    os << "\"running\":"   << (running_.load() ? "true" : "false") << ',';
-    os << "\"finished\":"  << (finished_.load() ? "true" : "false") << ',';
+    os << "\"running\":" << (running_.load() ? "true" : "false") << ',';
+    os << "\"finished\":" << (finished_.load() ? "true" : "false") << ',';
+    os << "\"stopRequested\":" << (stopRequested_.load() ? "true" : "false") << ',';
     os << "\"generation\":" << latest_.gen << ',';
     os << "\"totalGenerations\":" << totalGenerations_ << ',';
     os << "\"elapsedSeconds\":" << elapsed << ',';
@@ -91,15 +93,15 @@ std::string TrainingMonitor::toJson() const {
         };
 
     os << "\"history\":{";
-    writeArr("gen",       [](const GenRecord& r) { return r.gen; });
-    writeArr("best",      [](const GenRecord& r) { return r.best; });
-    writeArr("avg",       [](const GenRecord& r) { return r.avg; });
-    writeArr("avgFood",   [](const GenRecord& r) { return r.avgFood; });
-    writeArr("bestFood",  [](const GenRecord& r) { return r.bestFood; });
-    writeArr("bestSpf",   [](const GenRecord& r) { return r.bestSpf; });
-    writeArr("avgSpf",    [](const GenRecord& r) { return r.avgSpf; });
+    writeArr("gen", [](const GenRecord& r) { return r.gen; });
+    writeArr("best", [](const GenRecord& r) { return r.best; });
+    writeArr("avg", [](const GenRecord& r) { return r.avg; });
+    writeArr("avgFood", [](const GenRecord& r) { return r.avgFood; });
+    writeArr("bestFood", [](const GenRecord& r) { return r.bestFood; });
+    writeArr("bestSpf", [](const GenRecord& r) { return r.bestSpf; });
+    writeArr("avgSpf", [](const GenRecord& r) { return r.avgSpf; });
     writeArr("diversity", [](const GenRecord& r) { return r.diversity; });
-    writeArr("mutation",  [](const GenRecord& r) { return r.mutation; }, /*last=*/true);
+    writeArr("mutation", [](const GenRecord& r) { return r.mutation; }, /*last=*/true);
     os << '}';
 
     os << '}';
