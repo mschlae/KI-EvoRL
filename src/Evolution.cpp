@@ -291,15 +291,15 @@ void Evolution::train() {
             rec.diversity = diversity;
             rec.species = (int)speciesRepresentatives.size();
 
-            // ---------- GEÄNDERT: Replay nur alle 20 Generationen ----------
+            // ---------- GEÄNDERT: Replay nur alle 10 Generationen ----------
             if (generation % 10 == 0) {
-                monitor_->setReplay(recordReplay(population[0], genSeeds[0], generation + 1));
+                
             }
-
+            monitor_->setReplay(recordReplay(population[0], genSeeds[0], generation + 1));
             monitor_->update(rec, globalBest.baseFitness, globalBest.food,
                 g_curriculum_difficulty, inject, GENERATIONS);
         }
-        if (avgFit > 5000) {
+        if (avgFit > 10000) {
             std::cout << "AvgFit" << avgFit << std::endl;
             generation = GENERATIONS;
         }
