@@ -74,6 +74,44 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
 
   main{padding:24px 28px 48px;max-width:1280px;margin:0 auto}
 
+  /* Parameter-Panel (Live-Tuning) */
+  .config{background:var(--panel);border:1px solid var(--line);border-radius:var(--grid-radius);padding:16px 18px;margin-bottom:26px}
+  .config-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .config-head h2{margin:0;font-size:13.5px;font-weight:600;letter-spacing:.02em}
+  .config-head .hint{color:var(--muted);font-size:12px}
+  .config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:13px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+  .field input{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;color:var(--txt);
+    font-family:"JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    font-size:15px;padding:9px 11px;width:100%;outline:none;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  .field input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,166,35,.15)}
+  /* native Spinner ausblenden -> reine Tastatureingabe */
+  .field input::-webkit-outer-spin-button,.field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .field input[type=number]{-moz-appearance:textfield}
+  .config-actions{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
+  .btn-apply{
+    display:inline-flex;align-items:center;gap:8px;padding:9px 20px;border-radius:999px;
+    border:1px solid #6a4a13;background:linear-gradient(180deg,#2a2113,#1b150c);color:var(--amber);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .btn-apply:hover{background:var(--amber);color:#0a0e13;border-color:var(--amber)}
+  .btn-apply:disabled{opacity:.6;cursor:default}
+  .btn-ghost{
+    display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel-2);color:var(--muted);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+    transition:color .15s,border-color .15s;
+  }
+  .btn-ghost:hover{color:var(--txt);border-color:#2c3a48}
+  .cfg-msg{font-size:12.5px;color:var(--muted)}
+  .cfg-msg.ok{color:var(--teal)}
+  .cfg-msg.err{color:var(--rose)}
+
   /* Generations-Fortschritt */
   .progress-wrap{margin-bottom:24px}
   .progress-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
@@ -155,6 +193,44 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
       <div class="card"><div class="label">Mutation σ</div><div class="value mono" id="mut">–</div></div>
       <div class="card"><div class="label">Diversität</div><div class="value mono" id="div">–</div></div>
       <div class="card"><div class="label">Spezies</div><div class="value mono" id="species">–</div></div>
+    </section>
+
+    <section class="config">
+      <div class="config-head">
+        <h2>Parameter · Live-Tuning</h2>
+        <span class="hint">Werte eingeben und übernehmen — wirkt ab der nächsten Generation</span>
+      </div>
+      <div class="config-grid">
+        <div class="field">
+          <label for="cfgMutation">Mutation σ</label>
+          <input id="cfgMutation" type="number" step="0.001" min="0" inputmode="decimal" placeholder="z. B. 0.080">
+        </div>
+        <div class="field">
+          <label for="cfgFoodReward">Belohnung / Nahrung</label>
+          <input id="cfgFoodReward" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 60">
+        </div>
+        <div class="field">
+          <label for="cfgStepCost">Kosten / Schritt</label>
+          <input id="cfgStepCost" type="number" step="0.01" inputmode="decimal" placeholder="z. B. 0.05">
+        </div>
+        <div class="field">
+          <label for="cfgRewardWeight">Reward-Gewicht</label>
+          <input id="cfgRewardWeight" type="number" step="0.05" min="0" inputmode="decimal" placeholder="z. B. 0.30">
+        </div>
+        <div class="field">
+          <label for="cfgExploreBonus">Erkundungs-Bonus</label>
+          <input id="cfgExploreBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 150">
+        </div>
+        <div class="field">
+          <label for="cfgEfficiencyBonus">Effizienz-Bonus</label>
+          <input id="cfgEfficiencyBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 40">
+        </div>
+      </div>
+      <div class="config-actions">
+        <button id="cfgApply" class="btn-apply" type="button">Übernehmen</button>
+        <button id="cfgReset" class="btn-ghost" type="button">Zurücksetzen</button>
+        <span id="cfgMsg" class="cfg-msg"></span>
+      </div>
     </section>
 
     <section class="arena">
@@ -259,6 +335,9 @@ function render(d){
     stopBtn.hidden=true;
   }
 
+  // Parameter-Felder einmalig aus dem Backend vorbefuellen (sofern es 'config' liefert).
+  if(d.config){ lastCfg=d.config; if(!cfgHydrated){ fillConfig(d.config); cfgHydrated=true; } }
+
   $("genNow").textContent=fmt(d.generation,0);
   $("genTotal").textContent=fmt(d.totalGenerations,0);
   const pct = d.totalGenerations? Math.min(100,100*d.generation/d.totalGenerations):0;
@@ -362,6 +441,59 @@ $("stopBtn").addEventListener("click", async ()=>{
   const b=$("stopBtn"); b.disabled=true; b.textContent="Wird gestoppt…";
   try{ await fetch("/api/stop",{method:"POST"}); }
   catch(e){ /* Backend meldet den Stop ueber /api/status zurueck */ }
+});
+
+// ---- Parameter-Panel (Live-Tuning) ----
+// Mapping JSON-Schluessel -> Feld-ID. Diese Schluessel gehen an POST /api/config.
+const CFG_FIELDS = {
+  mutation:        "cfgMutation",
+  foodReward:      "cfgFoodReward",
+  stepCost:        "cfgStepCost",
+  rewardWeight:    "cfgRewardWeight",
+  exploreBonus:    "cfgExploreBonus",
+  efficiencyBonus: "cfgEfficiencyBonus",
+};
+let cfgHydrated=false, lastCfg=null;
+
+function fillConfig(cfg){
+  if(!cfg) return;
+  for(const [key,id] of Object.entries(CFG_FIELDS)){
+    const el=$(id);
+    if(!el || el===document.activeElement) continue;   // nicht ueberschreiben, waehrend getippt wird
+    if(cfg[key]!=null) el.value=cfg[key];
+  }
+}
+function readConfig(){
+  const out={};
+  for(const [key,id] of Object.entries(CFG_FIELDS)){
+    const el=$(id);
+    if(el && el.value!=="" && !isNaN(parseFloat(el.value))) out[key]=parseFloat(el.value);
+  }
+  return out;
+}
+function cfgMessage(text,kind){
+  const m=$("cfgMsg"); m.textContent=text||""; m.className="cfg-msg"+(kind?(" "+kind):"");
+  clearTimeout(cfgMessage._t);
+  if(text) cfgMessage._t=setTimeout(()=>{ m.textContent=""; m.className="cfg-msg"; },4000);
+}
+
+$("cfgApply").addEventListener("click", async ()=>{
+  const body=readConfig();
+  if(!Object.keys(body).length){ cfgMessage("Keine Werte eingegeben.","err"); return; }
+  const btn=$("cfgApply"); btn.disabled=true;
+  try{
+    const r=await fetch("/api/config",{method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    cfgMessage("Parameter übernommen — wirkt ab der nächsten Generation.","ok");
+  }catch(e){
+    cfgMessage("Konnte Parameter nicht senden (Backend /api/config?).","err");
+  }finally{ btn.disabled=false; }
+});
+
+$("cfgReset").addEventListener("click", ()=>{
+  if(lastCfg){ fillConfig(lastCfg); cfgMessage("Auf Backend-Werte zurückgesetzt.",""); }
+  else cfgMessage("Keine Backend-Werte verfügbar.","err");
 });
 
 window.addEventListener("resize",()=>{ if(lastData) render(lastData); drawArena(); });
