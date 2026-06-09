@@ -12,7 +12,7 @@ constexpr int   OBSTACLE_COUNT = 5;
 
 // ----- Reward Shaping -----
 constexpr float START_ENERGY = 80.0f;   // mehr Startenergie -> längere Episoden früh
-constexpr float STEP_COST = 1.5f;    // geringer -> Agent wird nicht für Bewegung bestraft
+constexpr float STEP_COST = 4.5f;    // geringer -> Agent wird nicht für Bewegung bestraft
 constexpr float WALL_PENALTY = -20.0f;  // harte Strafe für Wandkollisionen
 constexpr float FOOD_REWARD = 150.0f;  // höher -> klares Lernsignal
 constexpr float EXPLORATION_BONUS = 0.2f;    // kleiner Anreiz für neue Zellen
@@ -22,7 +22,7 @@ constexpr float APPROACH_FOOD_BONUS = 2.0f;    // NEU: Bonus wenn Distanz zu nä
 constexpr float IDLE_PENALTY = -0.5f;   // NEU: Strafe wenn Agent keine Fortschritte macht
 
 constexpr int   BASE_FOOD_COUNT = 15;      // mehr Nahrung -> leichteres Lernsignal
-constexpr float FOOD_RESPAWN_RATE = 0.03f;
+constexpr float FOOD_RESPAWN_RATE = 0.3f;
 
 
 // ----- Netz -----
