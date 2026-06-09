@@ -251,6 +251,24 @@ void Evolution::train() {
             avgFit /= POPULATION_SIZE; avgStep /= POPULATION_SIZE; avgFood /= POPULATION_SIZE;
             if (avgFood < 1) avgFood = 1;
 
+        if (avgFit > 5000) {
+            generation = GENERATIONS;
+        }
+        cout << "Gen " << generation + 1 << "/" << GENERATIONS
+            << " | Score=" << (avgFit + avgFood * 5 + avgStep) / 100
+            << " | Best=" << population[0].fitness
+            << " | AvgFit=" << avgFit
+            << " | AvgFood=" << avgFood
+            << " | AvgSteps=" << avgStep
+            << " | BestFood=" << population[0].food
+            << " | SPF=" << (float)avgStep / (float)avgFood
+            << " | Mut=" << mutationStrength
+            << " | Div=" << diversity;
+        if (inject) cout << " [INJECT]";
+        cout << "\n";
+
+        // ---- Live-Status an das Dashboard melden ----
+        if (monitor_) {
             // SPF = Schritte pro Nahrung (niedriger = besser), zur Anzeige gedeckelt.
             auto cap = [](float v) { return v > 400.0f ? 400.0f : v; };
             float avgSpf = (float)avgStep / (float)avgFood;
@@ -278,7 +296,10 @@ void Evolution::train() {
             monitor_->update(rec, globalBest.baseFitness, globalBest.food,
                 g_curriculum_difficulty, inject, GENERATIONS);
         }
-
+        if (avgFit > 5000) {
+            std::cout << "AvgFit" << avgFit << std::endl;
+            generation = GENERATIONS;
+        }
         // ---- Neue Generation erzeugen ----
         vector<Brain> next;
         next.reserve(POPULATION_SIZE);
