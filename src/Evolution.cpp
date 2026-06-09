@@ -309,10 +309,7 @@ void Evolution::train() {
             monitor_->update(rec, globalBest.baseFitness, globalBest.food,
                 g_curriculum_difficulty, inject, GENERATIONS);
         }
-        if (avgFit > 10000) {
-            std::cout << "AvgFit" << avgFit << std::endl;
-            generation = GENERATIONS;
-        }
+        
         // ---- Neue Generation erzeugen ----
         vector<Brain> next;
         next.reserve(POPULATION_SIZE);
