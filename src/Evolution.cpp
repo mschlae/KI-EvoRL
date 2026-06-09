@@ -68,7 +68,7 @@ float Evolution::evaluate(Brain& brain, bool visualize, bool recordNovelty,
         World world;
         world.earlyStopLimit = earlyStopLimit;
         brain.resetHidden();
-        while (world.alive && world.steps < MAX_EPISODE_STEPS) {
+        while (world.alive && world.steps < MAX_STEPS) {
             auto sens = world.getSensors();
             float logits[OUTPUTS];
             brain.forward(sens, logits);
@@ -255,9 +255,7 @@ void Evolution::train() {
         avgFit /= POPULATION_SIZE; avgStep /= POPULATION_SIZE; avgFood /= POPULATION_SIZE;
         if (avgFood < 1) avgFood = 1;
 
-        if (avgFit > 5000) {
-            generation = GENERATIONS;
-        }
+       
         cout << "Gen " << generation + 1 << "/" << GENERATIONS
             << " | Score=" << (avgFit + avgFood * 5 + avgStep) / 100
             << " | Best=" << population[0].fitness
@@ -265,6 +263,7 @@ void Evolution::train() {
             << " | AvgFood=" << avgFood
             << " | AvgSteps=" << avgStep
             << " | BestFood=" << population[0].food
+            << " | BestStep=" << population[0].steps
             << " | SPF=" << (float)avgStep / (float)avgFood
             << " | Mut=" << mutationStrength
             << " | Div=" << diversity;
@@ -275,7 +274,7 @@ void Evolution::train() {
         if (monitor_) {
             // SPF = Schritte pro Nahrung (niedriger = besser), zur Anzeige gedeckelt.
             auto cap = [](float v) { return v > 400.0f ? 400.0f : v; };
-            float avgSpf = cap((float)avgStep / (float)avgFood);
+            float avgSpf = (float)avgStep / (float)avgFood;
             float bestSpf = cap(population[0].food > 0
                 ? (float)population[0].steps / (float)population[0].food
                 : (float)population[0].steps);
@@ -300,7 +299,10 @@ void Evolution::train() {
             monitor_->update(rec, globalBest.baseFitness, globalBest.food,
                 g_curriculum_difficulty, inject, GENERATIONS);
         }
-
+        if (avgFit > 5000) {
+            std::cout << "AvgFit" << avgFit << std::endl;
+            generation = GENERATIONS;
+        }
         // ---- Neue Generation erzeugen ----
         vector<Brain> next;
         next.reserve(POPULATION_SIZE);
