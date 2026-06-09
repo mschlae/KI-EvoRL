@@ -109,4 +109,4 @@ EXE ohne externe Dateien läuft. Zum Bearbeiten:
 
 ## Lizenz
 
-Frei verwendbar für eigene Zwecke. Lizenz nach Bedarf ergänzen.
+
