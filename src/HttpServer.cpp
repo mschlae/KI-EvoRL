@@ -136,14 +136,19 @@ void HttpServer::handleClient(long long sockLL) {
     if (n <= 0) return;
     buf[n] = '\0';
 
-    // Sehr einfacher Request-Parser: "GET <pfad> HTTP/1.1"
+    // Sehr einfacher Request-Parser: "METHOD <pfad> HTTP/1.1"
     std::string req(buf);
+    std::string method = "GET";
     std::string path = "/";
     {
         size_t sp1 = req.find(' ');
         size_t sp2 = (sp1 == std::string::npos) ? std::string::npos : req.find(' ', sp1 + 1);
-        if (sp1 != std::string::npos && sp2 != std::string::npos)
-            path = req.substr(sp1 + 1, sp2 - sp1 - 1);
+        if (sp1 != std::string::npos) {
+            method = req.substr(0, sp1);
+            if (sp2 != std::string::npos) {
+                path = req.substr(sp1 + 1, sp2 - sp1 - 1);
+            }
+        }
     }
     // Query-String abschneiden
     size_t q = path.find('?');
@@ -157,6 +162,10 @@ void HttpServer::handleClient(long long sockLL) {
     }
     else if (path == "/api/replay") {
         sendResponse(s, "200 OK", "application/json", monitor_.replayJson());
+    }
+    else if (path == "/api/stop" && method == "POST") {
+        monitor_.requestStop();
+        sendResponse(s, "200 OK", "application/json", "{\"ok\":true}");
     }
     else {
         sendResponse(s, "404 Not Found", "text/plain; charset=utf-8", "Not Found");
