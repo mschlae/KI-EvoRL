@@ -1,23 +1,19 @@
-# EvoRL — Neuroevolution mit Live-Dashboard
+# EvoRL — Neuroevolution with Live Dashboard
 
-Ein evolutionärer Reinforcement-Learning-Agent: Eine Population rekurrenter
-**GRU-Netze** lernt per genetischem Algorithmus, sich in einer Gitterwelt zu
-bewegen und Nahrung zu sammeln. Inklusive Speziation, Novelty Search, Hall of
-Fame und einem eingebauten **Web-Dashboard** zur Live-Beobachtung des Trainings.
+An evolutionary Reinforcement Learning agent: A population of recurrent **GRU networks** learns through a genetic algorithm to move in a grid world and collect food. Includes speciation, novelty search, hall of fame, and a built-in **web dashboard** for live training observation.
 
 ---
 
-## Schnellstart (Visual Studio)
+## Quick Start (Visual Studio)
 
-1. `EvoRL.sln` öffnen.
-2. Konfiguration auf **Release | x64** stellen.
-3. Mit **F5** (oder Strg+F5) starten.
-4. Browser öffnen: **http://localhost:8080**
+1. Open `EvoRL.sln`.
+2. Set configuration to **Release | x64**.
+3. Start with **F5** (or Ctrl+F5).
+4. Open browser: **http://localhost:8080**
 
-OpenMP, der C++17-Standard und `ws2_32.lib` sind im Projekt bereits konfiguriert
-— es ist keine weitere Einrichtung nötig.
+OpenMP, the C++17 standard, and `ws2_32.lib` are already configured in the project — no further setup required.
 
-## Alternativer Build (CMake / Linux / macOS)
+## Alternative Build (CMake / Linux / macOS)
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -27,62 +23,58 @@ cmake --build build -j
 
 ---
 
-## Projektstruktur
+## Project Structure
 
 ```
 EvoRL/
-├── EvoRL.sln                 Visual-Studio-Solution
-├── EvoRL.vcxproj(.filters)   Projektdatei + logische Gruppierung
-├── CMakeLists.txt            plattformübergreifender Build
+├── EvoRL.sln                 Visual Studio solution
+├── EvoRL.vcxproj(.filters)   Project file + logical grouping
+├── CMakeLists.txt            Cross-platform build
 ├── src/
-│   ├── Config.h/.cpp         alle Tuning-Parameter + Curriculum-Global
-│   ├── Rng.h/.cpp            thread-lokaler Zufallsgenerator
-│   ├── MathUtils.h           Aktivierungen / Softmax
-│   ├── World.h/.cpp          Umgebung: Sensoren, Aktionen, Reward
-│   ├── Brain.h/.cpp          GRU-Netz mit selbstadaptiver Mutation
-│   ├── Evolution.h/.cpp      genetischer Algorithmus + Speziation
-│   ├── TrainingMonitor.h/.cpp thread-sicherer Status für das Dashboard
-│   ├── HttpServer.h/.cpp     minimaler HTTP-Server (Winsock/POSIX)
-│   ├── DashboardHtml.h/.cpp  eingebettete Dashboard-Seite
-│   └── main.cpp              Einstiegspunkt
+│   ├── Config.h/.cpp         All tuning parameters + curriculum globals
+│   ├── Rng.h/.cpp            Thread-local random number generator
+│   ├── MathUtils.h           Activations / Softmax
+│   ├── World.h/.cpp          Environment: sensors, actions, reward
+│   ├── Brain.h/.cpp          GRU network with self-adaptive mutation
+│   ├── Evolution.h/.cpp      Genetic algorithm + speciation
+│   ├── TrainingMonitor.h/.cpp Thread-safe status for dashboard
+│   ├── HttpServer.h/.cpp     Minimal HTTP server (Winsock/POSIX)
+│   ├── DashboardHtml.h/.cpp  Embedded dashboard page
+│   └── main.cpp              Entry point
 └── web/
-    └── index.html            Dashboard-Quelle (für Anpassungen)
+    └── index.html            Dashboard source (for customization)
 ```
 
-### Verantwortlichkeiten der Module
+### Module Responsibilities
 
-| Modul | Aufgabe |
-|-------|---------|
-| **Config** | Zentrale Konstanten. Hier wird getunt. |
-| **World** | Die simulierte Welt: 77 Sensorwerte, Reward-Shaping, Anti-Loop, Early-Stopping. |
-| **Brain** | Rekurrentes GRU-Netz (77→96→4), Mutation, Crossover, Ähnlichkeitsmaß. |
-| **Evolution** | Selektion, Speziation, Novelty Search, Hall of Fame, Stagnations-Boosts. |
-| **TrainingMonitor** | Mutex-geschützter Snapshot + Verlaufshistorie, JSON-Serialisierung. |
-| **HttpServer** | Bedient `/` (Dashboard) und `/api/status` (JSON) in eigenem Thread. |
+| Module | Task |
+|--------|------|
+| **Config** | Central constants. This is where you tune parameters. |
+| **World** | The simulated world: 77 sensor values, reward shaping, anti-loop, early stopping. |
+| **Brain** | Recurrent GRU network (77→96→4), mutation, crossover, similarity measure. |
+| **Evolution** | Selection, speciation, novelty search, hall of fame, stagnation boosts. |
+| **TrainingMonitor** | Mutex-protected snapshot + history, JSON serialization. |
+| **HttpServer** | Serves `/` (dashboard) and `/api/status` (JSON) in its own thread. |
 
 ---
 
-## Das Dashboard
+## Dashboard
 
-Der Server läuft in einem eigenen Thread und stört das Training nicht. Er ist nur
-**lokal** erreichbar (`127.0.0.1`) und bietet zwei Endpunkte:
+The server runs in its own thread and does not interfere with training. It is only accessible **locally** (`127.0.0.1`) and provides two endpoints:
 
-- `GET /` — das HTML-Dashboard
-- `GET /api/status` — der aktuelle Status als JSON (Kennzahlen + Verlauf)
+- `GET /` — the HTML dashboard
+- `GET /api/status` — current status as JSON (metrics + history)
 
-Das Dashboard pollt jede Sekunde und zeigt Generation, Fortschritt, beste/­durch­schnittliche
-Fitness, Nahrung pro Episode, Mutation σ, Diversität, Anzahl Spezies sowie zwei
-Verlaufs-Charts.
+The dashboard polls every second and displays generation, progress, best/average fitness, food per episode, mutation σ, diversity, number of species, and two history charts.
 
-Den Port änderst du in `Config.h` (`WEB_SERVER_PORT`).
+You can change the port in `Config.h` (`WEB_SERVER_PORT`).
 
-### Dashboard anpassen
+### Customizing the Dashboard
 
-Das Dashboard ist als String in `src/DashboardHtml.cpp` einkompiliert, damit die
-EXE ohne externe Dateien läuft. Zum Bearbeiten:
+The dashboard is compiled as a string in `src/DashboardHtml.cpp` so the executable runs without external files. To edit it:
 
-1. `web/index.html` ändern (bequem im Browser testbar).
-2. Neu einbetten — z. B. unter Linux/macOS/Git-Bash:
+1. Modify `web/index.html` (easily testable in a browser).
+2. Re-embed it — for example on Linux/macOS/Git-Bash:
 
    ```bash
    {
@@ -92,21 +84,20 @@ EXE ohne externe Dateien läuft. Zum Bearbeiten:
    } > src/DashboardHtml.cpp
    ```
 
-   Alternativ `DashboardHtml.cpp` direkt editieren.
+   Alternatively, edit `DashboardHtml.cpp` directly.
 
 ---
 
-## Hinweise
+## Notes
 
-- **OpenMP** parallelisiert die Evaluation der Population — auf Mehrkern-CPUs
-  deutlich schneller. Standard: alle Kerne (`EVAL_THREADS = 0`).
-- Die finale **Konsolen-Demo** des besten Agenten nutzt ANSI-Escapes zum Löschen
-  des Bildschirms. In modernen Terminals (Windows Terminal, VS-Konsole) wird das
-  korrekt dargestellt.
-- Standardmäßig läuft das Training über sehr viele Generationen
-  (`GENERATIONS` in `Config.h`). Für einen schnellen Funktionstest diesen Wert
-  herabsetzen.
+- **OpenMP** parallelizes population evaluation — significantly faster on multi-core CPUs. Default: all cores (`EVAL_THREADS = 0`).
+- The final **console demo** of the best agent uses ANSI escapes to clear the screen. This is rendered correctly in modern terminals (Windows Terminal, VS Console).
+- By default, training runs over many generations (`GENERATIONS` in `Config.h`). For a quick functionality test, reduce this value.
 
-## Lizenz
+## License
 
+This project is licensed under the **Creative Commons Attribution 4.0 International License (CC BY 4.0)**.
 
+You are free to use, modify, and distribute this code, provided you give appropriate credit to the original author and include a copy of the license.
+
+See [LICENSE](LICENSE) for the full license text.
