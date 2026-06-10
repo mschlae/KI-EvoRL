@@ -1,10 +1,12 @@
 # EvoRL — Neuroevolution with Live Dashboard
 
-An evolutionary Reinforcement Learning agent: A population of recurrent **GRU networks** learns through a genetic algorithm to move in a grid world and collect food. Includes speciation, novelty search, hall of fame, and a built-in **web dashboard** for live training observation.
+An evolutionary Reinforcement Learning agent: A population of recurrent **GRU networks** learns through a genetic algorithm to move in a grid world and collect food. Includes speciation, novelty search, and adaptive mutation. Real-time visualization via an embedded web dashboard.
+
+**Keywords:** Genetic Algorithm, Neuroevolution, Reinforcement Learning, GRU Networks, NEAT, Speciation, C++, Live Dashboard
 
 ---
 
-## Quick Start (Visual Studio)
+## 🚀 Quick Start (Visual Studio)
 
 1. Open `EvoRL.sln`.
 2. Set configuration to **Release | x64**.
@@ -13,7 +15,7 @@ An evolutionary Reinforcement Learning agent: A population of recurrent **GRU ne
 
 OpenMP, the C++17 standard, and `ws2_32.lib` are already configured in the project — no further setup required.
 
-## Alternative Build (CMake / Linux / macOS)
+## 🔧 Alternative Build (CMake / Linux / macOS)
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -23,7 +25,7 @@ cmake --build build -j
 
 ---
 
-## Project Structure
+## 📋 Project Structure
 
 ```
 EvoRL/
@@ -58,7 +60,7 @@ EvoRL/
 
 ---
 
-## Dashboard
+## 📊 Dashboard
 
 The server runs in its own thread and does not interfere with training. It is only accessible **locally** (`127.0.0.1`) and provides two endpoints:
 
@@ -88,13 +90,33 @@ The dashboard is compiled as a string in `src/DashboardHtml.cpp` so the executab
 
 ---
 
-## Notes
+## ✨ Features
+
+- **Neuroevolution**: Genetic algorithm optimizes neural network weights and topology
+- **GRU Networks**: Recurrent architecture for temporal learning
+- **Speciation**: Prevents premature convergence, maintains population diversity
+- **Novelty Search**: Rewards behavioral diversity, not just fitness
+- **Adaptive Mutation**: Self-tuning mutation rates per individual
+- **OpenMP Parallelization**: Multi-threaded fitness evaluation
+- **Real-time Dashboard**: Live monitoring of training progress
+- **Cross-platform**: Windows (Visual Studio), Linux, macOS (CMake)
+
+## 📈 Use Cases
+
+- Learning evolutionary algorithms and neuroevolution
+- Experimental RL agent design
+- AI agent visualization and monitoring
+- Genetic algorithm optimization techniques
+
+---
+
+## 📝 Notes
 
 - **OpenMP** parallelizes population evaluation — significantly faster on multi-core CPUs. Default: all cores (`EVAL_THREADS = 0`).
 - The final **console demo** of the best agent uses ANSI escapes to clear the screen. This is rendered correctly in modern terminals (Windows Terminal, VS Console).
 - By default, training runs over many generations (`GENERATIONS` in `Config.h`). For a quick functionality test, reduce this value.
 
-## License
+## 📄 License
 
 This project is licensed under the **Creative Commons Attribution 4.0 International License (CC BY 4.0)**.
 
