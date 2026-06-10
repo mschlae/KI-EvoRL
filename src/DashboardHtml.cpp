@@ -1,17 +1,20 @@
 // ============================================================
 //  DashboardHtml.cpp  -  Eingebettete Dashboard-Seite
-//  AUTO-GENERIERT aus web/index.html. Zum Anpassen entweder
-//  diese Datei direkt editieren oder web/index.html aendern
-//  und neu einbetten (siehe README, Abschnitt "Dashboard").
+//  AUTO-GENERIERT aus web/index.html.
 //
 //  Aufbau der Seite (SPA mit Hash-Routing):
-//    #/home     - Modell-Bibliothek: laden, vorfuehren, analysieren
-//    #/training - Live-Telemetrie des laufenden Trainings
-//  Vorhandene Endpunkte: /api/status, /api/replay, /api/stop,
-//  /api/config. Optionale neue Endpunkte fuer den Home-Bereich:
-//  GET /api/models, GET /api/models/{id}/replay,
-//  POST /api/models/{id}/load. Fehlen sie, degradiert die Seite
-//  sauber (lokale Replay-Dateien funktionieren immer).
+//    #/home     - Modell-Bibliothek (echte Brains, inkl. dem
+//                 aktuell besten Live-Modell), Playground auf
+//                 fester Engine-Weltgroesse, Vorfuehrung, Analyse
+//    #/training - Live-Telemetrie + "Modell sichern"
+//  Backend-Endpunkte (alle im HttpServer umgesetzt):
+//    GET  /api/status   (enthaelt gridW/gridH, hasBest)
+//    GET  /api/replay   POST /api/stop   GET|POST /api/config
+//    GET  /api/models                 - Bibliothek (live + gespeichert)
+//    POST /api/models/save            - aktuell bestes Brain sichern
+//    GET  /api/models/{id}/replay     - Episode des Brains (auch "live")
+//    POST /api/models/{id}/load       - Brain ins Training uebernehmen
+//    POST /api/playground/run         - Brain auf eigener Karte
 // ============================================================
 #include "DashboardHtml.h"
 
@@ -134,6 +137,7 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
   .panel-head .hint{color:var(--muted);font-size:12px}
 
   .btn{
+    text-decoration:none;
     display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;
     border:1px solid var(--line);background:var(--panel-2);color:var(--txt);
     font-size:12.5px;font-weight:600;letter-spacing:.03em;cursor:pointer;
@@ -274,6 +278,23 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
   .empty p{margin:0 auto 16px;font-size:12.5px;line-height:1.6;max-width:56ch}
   .empty code{color:var(--teal);font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
 
+  /* Home: Playground (Welt-Editor) */
+  .pg-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .pg-toolbar .field{flex-direction:row;align-items:center;gap:8px}
+  .pg-toolbar .field input{width:74px;font-size:13px;padding:7px 9px}
+  .pg-toolbar select{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:999px;color:var(--txt);
+    font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px;padding:7px 13px;outline:none;cursor:pointer;
+  }
+  .pg-toolbar select:focus{border-color:var(--teal)}
+  .pg-edit{width:100%;max-width:520px;height:auto;display:block;margin:0 auto;cursor:crosshair;touch-action:none;
+    background:radial-gradient(120% 120% at 50% 0%, #101a24 0%, var(--panel-2) 70%);
+    border:1px solid var(--line);border-radius:12px}
+  .seg-btn.tool-wall.is-active{background:#3a4a5c;color:#dfe7ef}
+  .seg-btn.tool-food.is-active{background:var(--amber);color:#1b1206}
+  .seg-btn.tool-start.is-active{background:var(--teal);color:#06231f}
+  .seg-btn.tool-erase.is-active{background:var(--rose);color:#fff}
+
   /* Home: Analyse */
   .ana-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}
   @media(max-width:900px){.ana-grid{grid-template-columns:1fr}}
@@ -362,14 +383,78 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
         <div class="panel">
           <div class="panel-head">
             <h2>Modell-Bibliothek</h2>
-            <span class="hint">Quelle: <span class="mono">GET /api/models</span> · zusätzlich lassen sich Replay-Dateien direkt öffnen</span>
+            <span class="hint">Gespeicherte Modelle (Brains) vom Server · <span class="mono">GET /api/models</span></span>
           </div>
           <div class="model-grid" id="modelGrid"></div>
           <div class="config-actions">
             <button id="modelsRefresh" class="btn ghost small" type="button">⟳ Liste aktualisieren</button>
-            <button id="fileOpenBtn" class="btn small" type="button">Replay-Datei öffnen (.json)</button>
-            <input id="fileOpen" type="file" accept=".json,application/json" hidden>
             <span id="modelsMsg" class="cfg-msg"></span>
+          </div>
+        </div>
+
+        <div class="panel" id="pgPanel">
+          <div class="panel-head">
+            <div>
+              <h2>Playground · Eigene Welt</h2>
+              <p class="arena-explain">Zeichne eine eigene Karte: <b>Wände</b> blockieren, <span class="hi-food">Nahrung</span> wird eingesammelt, der Startpunkt setzt den Agenten. Danach ein gespeichertes Modell wählen und die Episode laufen lassen.</p>
+            </div>
+            <span class="hint mono">POST /api/playground/run</span>
+          </div>
+
+          <div class="pg-toolbar">
+            <div class="field"><label for="pgW">Breite</label><input id="pgW" type="number" min="8" max="64" step="1" value="20"></div>
+            <div class="field"><label for="pgH">Höhe</label><input id="pgH" type="number" min="8" max="64" step="1" value="20"></div>
+            <button id="pgNew" class="btn small" type="button">Neue Karte</button>
+            <button id="pgClear" class="btn small ghost" type="button">Leeren</button>
+            <span id="pgSizeNote" class="hint"></span>
+            <div class="seg" id="pgTools" role="group" aria-label="Werkzeug">
+              <button class="seg-btn tool-wall is-active" data-tool="wall" type="button">Wand</button>
+              <button class="seg-btn tool-food" data-tool="food" type="button">Nahrung</button>
+              <button class="seg-btn tool-start" data-tool="start" type="button">Start</button>
+              <button class="seg-btn tool-erase" data-tool="erase" type="button">Radierer</button>
+            </div>
+          </div>
+
+          <canvas id="pgEdit" class="pg-edit"></canvas>
+
+          <div class="config-actions" style="justify-content:center">
+            <label class="gen-select"><span>Modell</span>
+              <select id="pgModel"><option value="">– Bibliothek leer –</option></select>
+            </label>
+            <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+              <label for="pgFoodReward" style="margin:0">Belohnung / Nahrung</label>
+              <input id="pgFoodReward" type="number" min="0" step="1" value="60" style="width:80px;font-size:13px;padding:7px 9px">
+            </div>
+            <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+              <label for="pgStepCost" style="margin:0">Kosten / Schritt</label>
+              <input id="pgStepCost" type="number" step="0.01" value="0.05" style="width:80px;font-size:13px;padding:7px 9px">
+            </div>
+            <div class="field" style="flex-direction:row;align-items:center;gap:8px">
+              <label for="pgSteps" style="margin:0">Max. Schritte</label>
+              <input id="pgSteps" type="number" min="50" max="5000" step="50" value="1000" style="width:90px;font-size:13px;padding:7px 9px">
+            </div>
+            <button id="pgRun" class="btn primary" type="button">▶ Episode starten</button>
+            <span id="pgMsg" class="cfg-msg"></span>
+          </div>
+
+          <div id="pgResult" hidden style="margin-top:18px">
+            <div class="panel-head">
+              <h2>Ergebnis</h2>
+              <div class="arena-meta mono"><span id="pgGen">–</span></div>
+            </div>
+            <canvas id="pgCanvas" class="arena-canvas"></canvas>
+            <div class="arena-bar"><span id="pgBar"></span></div>
+            <div class="arena-controls">
+              <button id="pgPlay" class="btn small" type="button">⏸ Pause</button>
+              <button id="pgRestart" class="btn small" type="button">⟲ Neu starten</button>
+              <div class="seg" id="pgSeg" role="group" aria-label="Geschwindigkeit">
+                <button class="seg-btn" data-speed="0.5" type="button">0,5×</button>
+                <button class="seg-btn is-active" data-speed="1" type="button">1×</button>
+                <button class="seg-btn" data-speed="2" type="button">2×</button>
+              </div>
+              <span class="arena-stat mono">Schritt <span id="pgStep">0</span><span class="dim">/<span id="pgLen">0</span></span></span>
+              <span class="arena-stat mono"><span class="dot-food"></span><span id="pgFood">0</span> Nahrung</span>
+            </div>
           </div>
         </div>
 
@@ -444,6 +529,21 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
           <div class="card"><div class="label">Diversität</div><div class="value mono" id="div">–</div></div>
           <div class="card"><div class="label">Spezies</div><div class="value mono" id="species">–</div></div>
         </section>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Modell sichern</h2>
+            <span class="hint">speichert das aktuell beste Brain — danach in der Bibliothek &amp; im Playground nutzbar · <span class="mono">POST /api/models/save</span></span>
+          </div>
+          <div class="config-actions" style="margin-top:0">
+            <div class="field" style="flex-direction:row;align-items:center;gap:8px;flex:1;min-width:220px;max-width:420px">
+              <label for="saveName" style="margin:0;white-space:nowrap">Name</label>
+              <input id="saveName" type="text" maxlength="60" placeholder="z. B. Sammler v2 · Gen 140" style="font-size:13px;padding:8px 11px">
+            </div>
+            <button id="saveModel" class="btn primary" type="button">Modell speichern</button>
+            <span id="saveMsg" class="cfg-msg"></span>
+          </div>
+        </div>
 
         <div class="panel">
           <div class="panel-head">
@@ -575,11 +675,13 @@ const API = {
   models:  "/api/models",            // GET  - [{id,name,generation,fitness,food,steps,savedAt,replayUrl?}]  (optional, fuer Home)
   modelReplay: id => "/api/models/"+encodeURIComponent(id)+"/replay",   // GET (optional, fuer Home)
   modelLoad:   id => "/api/models/"+encodeURIComponent(id)+"/load",     // POST (optional: Modell ins Training uebernehmen)
+  playgroundRun: "/api/playground/run", // POST {model,w,h,walls[],food[],start:[x,y],maxSteps} -> Replay-JSON
+  modelSave: "/api/models/save",        // POST {name?} - speichert das aktuell beste Modell des Trainings
 };
 
 /* ---------- 2) Router: Hash-Navigation + View-Registry ---------- */
 const VIEWS = {
-  home:     { title:"Home",     sub:"Modelle laden, vorführen und analysieren",        onShow(){ Home.refreshModels(false); } },
+  home:     { title:"Home",     sub:"Modelle laden, vorführen und analysieren",        onShow(){ Home.refreshModels(false); requestAnimationFrame(()=>Home.redrawPlayground()); } },
   training: { title:"Training", sub:"Neuroevolution eines GRU-Agenten · Live-Telemetrie", onShow(){ if(lastData) renderStatus(lastData); } },
 };
 let currentView=null;
@@ -788,6 +890,7 @@ function renderStatus(d){
   pill.className="status-pill"+(d.finished?" done":(d.running?" live":""));
   txt.textContent = d.finished ? "abgeschlossen" : (d.running ? "läuft" : "wartet");
   $("navGenHint").textContent = d.running && d.generation ? "Gen "+d.generation : "";
+  if(d.gridW && d.gridH) Home.ensureWorldSize(d.gridW, d.gridH);
 
   // Stop-Button (Topbar): nur sichtbar, solange ein Lauf aktiv ist.
   const stopBtn=$("stopBtn");
@@ -796,6 +899,10 @@ function renderStatus(d){
     stopBtn.disabled = !!d.stopRequested;
     stopBtn.textContent = d.stopRequested ? "Wird gestoppt…" : "Training stoppen";
   } else stopBtn.hidden=true;
+
+  // Modell sichern erst sinnvoll, wenn mindestens eine Generation evaluiert wurde
+  const sb=$("saveModel");
+  if(sb) sb.disabled = !((d.generation||0) > 0 || d.finished);
 
   // Parameter-Felder einmalig aus dem Backend vorbefuellen (sofern 'config' geliefert wird).
   if(d.config){ lastCfg=d.config; if(!cfgHydrated){ fillConfig(d.config); cfgHydrated=true; } }
@@ -902,6 +1009,30 @@ $("stopBtn").addEventListener("click", async ()=>{
   catch(e){ /* Backend meldet den Stop ueber /api/status zurueck */ }
 });
 
+// ---- Modell sichern: speichert das aktuell beste Brain auf dem Server ----
+function saveMsg(text,kind){
+  const m=$("saveMsg"); m.textContent=text||""; m.className="cfg-msg"+(kind?(" "+kind):"");
+  clearTimeout(saveMsg._t);
+  if(text) saveMsg._t=setTimeout(()=>{ m.textContent=""; m.className="cfg-msg"; },6000);
+}
+$("saveModel").addEventListener("click", async ()=>{
+  const btn=$("saveModel"); btn.disabled=true;
+  const name=$("saveName").value.trim();
+  try{
+    const r=await fetch(API.modelSave,{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(name? {name} : {})});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    let saved=null; try{ saved=await r.json(); }catch(e){}
+    const label=saved && saved.name ? saved.name : (name||"Modell");
+    saveMsg("„"+label+"“ gespeichert — jetzt in der Bibliothek verfügbar.","ok");
+    $("saveName").value="";
+    Home.refreshModels(false);          // Bibliothek im Hintergrund aktualisieren
+  }catch(e){
+    saveMsg("Speichern fehlgeschlagen ("+e.message+"). Backend-Endpunkt POST /api/models/save nötig.","err");
+  }finally{ btn.disabled=false; }
+});
+
 // Parameter-Panel (Live-Tuning). JSON-Schluessel -> Feld-ID; geht an POST /api/config.
 const CFG_FIELDS = {
   mutation:        "cfgMutation",
@@ -979,9 +1110,9 @@ const Home = (()=>{
         list=Array.isArray(data) ? data : (data.models||[]);
       }
     }catch(e){ /* Endpunkt (noch) nicht vorhanden -> leerer Zustand */ }
-    if(list){ models=models.filter(m=>m.local).concat(list.map(normalizeModel)); }
+    if(list) models=list.map(normalizeModel);
     renderModels();
-    if(announce) msg(list ? "Liste aktualisiert." : "Backend liefert /api/models (noch) nicht — lokale Dateien funktionieren trotzdem.", list?"ok":"");
+    if(announce) msg(list ? "Liste aktualisiert." : "Backend liefert /api/models (noch) nicht.", list?"ok":"err");
   }
 
   function normalizeModel(m){
@@ -991,7 +1122,7 @@ const Home = (()=>{
       generation: m.generation, fitness: m.fitness, food: m.food, steps: m.steps,
       savedAt: m.savedAt || m.date || null,
       replayUrl: m.replayUrl || null,
-      local:false, replay:null,
+      replay:null,
     };
   }
 
@@ -1001,9 +1132,10 @@ const Home = (()=>{
       grid.innerHTML =
         '<div class="empty" style="grid-column:1/-1">' +
         '<h3>Noch keine Modelle in der Bibliothek</h3>' +
-        '<p>Sobald das Backend unter <code>GET /api/models</code> gespeicherte Modelle auflistet, erscheinen sie hier. ' +
-        'Bis dahin kannst du jede vom Training erzeugte Replay-Datei (das JSON aus <code>recordReplay</code>) direkt öffnen und vorführen oder analysieren.</p>' +
-        '<button class="btn small" type="button" onclick="document.getElementById(\'fileOpen\').click()">Replay-Datei öffnen</button>' +
+        '<p>Speichere während (oder nach) einem Lauf im Bereich <code>Training</code> das aktuell beste Modell — ' +
+        'es erscheint dann hier und steht für Vorführung, Analyse und den Playground bereit. ' +
+        'Quelle der Liste: <code>GET /api/models</code>.</p>' +
+        '<a class="btn small" href="#/training">Zum Training</a>' +
         '</div>';
       return;
     }
@@ -1014,7 +1146,7 @@ const Home = (()=>{
           '<div class="mc-name">'+esc(m.name)+'</div>' +
           '<div class="mc-when mono">'+(m.savedAt?esc(m.savedAt):(m.generation!=null?("Generation "+esc(m.generation)):""))+'</div>' +
         '</div>' +
-        '<span class="mc-badge'+(m.local?" local":"")+'">'+(m.local?"lokal":"Server")+'</span></div>' +
+        '<span class="mc-badge">Brain</span></div>' +
         '<div class="mc-stats">' +
           '<div class="mc-stat food"><div class="v mono">'+fmt(m.food,0)+'</div><div class="k">Food</div></div>' +
           '<div class="mc-stat"><div class="v mono">'+fmt(m.fitness,0)+'</div><div class="k">Fitness</div></div>' +
@@ -1023,10 +1155,11 @@ const Home = (()=>{
         '<div class="mc-actions">' +
           '<button class="btn small" data-act="demo" type="button">▶ Vorführen</button>' +
           '<button class="btn small" data-act="analyze" type="button">Analysieren</button>' +
-          (m.local? "" : '<button class="btn small ghost" data-act="load" type="button">In Training laden</button>') +
+          '<button class="btn small ghost" data-act="load" type="button">In Training laden</button>' +
         '</div>' +
       '</article>';
     }).join("");
+    syncPlaygroundModels();
   }
 
   // Klicks der Modellkarten (Event-Delegation: funktioniert auch nach Re-Render)
@@ -1154,36 +1287,177 @@ const Home = (()=>{
     }
   }
 
-  // ---- Lokale Replay-Datei oeffnen ----
-  $("fileOpenBtn").addEventListener("click", ()=>$("fileOpen").click());
-  $("fileOpen").addEventListener("change", e=>{
-    const file=e.target.files && e.target.files[0];
-    if(!file) return;
-    const reader=new FileReader();
-    reader.onload=()=>{
-      try{
-        const rep=JSON.parse(reader.result);
-        if(!rep.frames || !rep.frames.length) throw new Error("kein 'frames'-Feld");
-        const m={
-          id:"local:"+file.name, name:file.name.replace(/\.json$/i,""),
-          generation:rep.generation, fitness:null, food:rep.food, steps:rep.steps,
-          savedAt:null, local:true, replay:rep,
-        };
-        models.unshift(m);
-        activeKey="0";
-        renderModels();
-        showDemo(m);
-        msg("„"+m.name+"“ geöffnet.","ok");
-      }catch(err){
-        msg("Datei ist kein gültiges Replay-JSON ("+err.message+").","err");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value="";          // gleiche Datei erneut waehlbar
+  /* ---- Playground: eigene Welt zeichnen und Modell darin laufen lassen ----
+     Zellwerte: 0 = frei, 1 = Wand, 2 = Nahrung. Der Rand ist immer Wand.
+     Gesendet wird an POST /api/playground/run:
+       { model, w, h, walls:[idx], food:[idx], start:[x,y], maxSteps }
+     Erwartete Antwort: dasselbe Replay-JSON wie /api/replay.            */
+  const pgPlayer = createArenaPlayer({
+    canvas:$("pgCanvas"), bar:$("pgBar"),
+    play:$("pgPlay"), restart:$("pgRestart"), seg:$("pgSeg"),
+    gen:$("pgGen"), step:$("pgStep"), len:$("pgLen"), food:$("pgFood"),
   });
+  const PG={W:20,H:20,cells:null,start:null,tool:"wall",painting:false,_css:0};
+
+  function pgIsBorder(x,y){ return x===0||y===0||x===PG.W-1||y===PG.H-1; }
+  function pgInit(w,h,keepNothing){
+    PG.W=w; PG.H=h;
+    PG.cells=new Uint8Array(w*h);
+    for(let x=0;x<w;x++){ PG.cells[x]=1; PG.cells[(h-1)*w+x]=1; }
+    for(let y=0;y<h;y++){ PG.cells[y*w]=1; PG.cells[y*w+w-1]=1; }
+    PG.start=[Math.floor(w/2),Math.floor(h/2)];
+    const cv=$("pgEdit"); cv.style.aspectRatio=w+" / "+h;
+    PG._css=0;
+    pgDraw();
+  }
+  function pgDraw(){
+    const cv=$("pgEdit"); if(!cv) return;
+    const dpr=window.devicePixelRatio||1;
+    const w=cv.clientWidth||460, h=cv.clientHeight||w;
+    const key=w+"x"+h;
+    if(key!==PG._css){ PG._css=key; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+    const ctx=cv.getContext("2d");
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+    const cs=Math.min(w/PG.W,h/PG.H);
+    const ox=(w-PG.W*cs)/2, oy=(h-PG.H*cs)/2;
+    const amber=getCss("--amber"), teal=getCss("--teal");
+
+    ctx.strokeStyle="rgba(255,255,255,.05)"; ctx.lineWidth=1; ctx.beginPath();
+    for(let i=0;i<=PG.W;i++){ ctx.moveTo(ox+i*cs,oy); ctx.lineTo(ox+i*cs,oy+PG.H*cs); }
+    for(let j=0;j<=PG.H;j++){ ctx.moveTo(ox,oy+j*cs); ctx.lineTo(ox+PG.W*cs,oy+j*cs); }
+    ctx.stroke();
+
+    for(let y=0;y<PG.H;y++)for(let x=0;x<PG.W;x++){
+      const v=PG.cells[y*PG.W+x];
+      if(v===1){
+        ctx.fillStyle="#23303d";
+        roundRect(ctx, ox+x*cs+0.5, oy+y*cs+0.5, cs-1, cs-1, Math.max(2,cs*0.18)); ctx.fill();
+      } else if(v===2){
+        ctx.fillStyle=amber;
+        ctx.beginPath(); ctx.arc(ox+(x+0.5)*cs, oy+(y+0.5)*cs, cs*0.26, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    if(PG.start){
+      ctx.fillStyle=teal;
+      const p=cs*0.18;
+      roundRect(ctx, ox+PG.start[0]*cs+p, oy+PG.start[1]*cs+p, cs-2*p, cs-2*p, Math.max(2,cs*0.26)); ctx.fill();
+    }
+  }
+  function pgCellAt(ev){
+    const cv=$("pgEdit");
+    const r=cv.getBoundingClientRect();
+    const cs=Math.min(r.width/PG.W,r.height/PG.H);
+    const ox=(r.width-PG.W*cs)/2, oy=(r.height-PG.H*cs)/2;
+    const x=Math.floor((ev.clientX-r.left-ox)/cs);
+    const y=Math.floor((ev.clientY-r.top-oy)/cs);
+    if(x<0||y<0||x>=PG.W||y>=PG.H) return null;
+    return [x,y];
+  }
+  function pgApply(c){
+    if(!c) return;
+    const [x,y]=c;
+    if(pgIsBorder(x,y)) return;                       // Rand bleibt Wand
+    const i=y*PG.W+x;
+    if(PG.tool==="start"){
+      if(PG.cells[i]!==1){ PG.start=[x,y]; }
+    } else if(PG.tool==="wall"){
+      if(!(PG.start && PG.start[0]===x && PG.start[1]===y)) PG.cells[i]=1;
+    } else if(PG.tool==="food"){
+      if(PG.cells[i]!==1) PG.cells[i]=2;
+    } else {                                           // Radierer
+      PG.cells[i]=0;
+    }
+    pgDraw();
+  }
+  function pgMsg(text,kind){
+    const m=$("pgMsg"); m.textContent=text||""; m.className="cfg-msg"+(kind?(" "+kind):"");
+    clearTimeout(pgMsg._t);
+    if(text) pgMsg._t=setTimeout(()=>{ m.textContent=""; m.className="cfg-msg"; },6000);
+  }
+
+  // Editor-Eingaben (Pointer Events: Maus + Touch)
+  const pgCv=$("pgEdit");
+  pgCv.addEventListener("pointerdown", e=>{ PG.painting=true; pgCv.setPointerCapture(e.pointerId); pgApply(pgCellAt(e)); });
+  pgCv.addEventListener("pointermove", e=>{ if(PG.painting) pgApply(pgCellAt(e)); });
+  pgCv.addEventListener("pointerup",   ()=>{ PG.painting=false; });
+  pgCv.addEventListener("pointercancel",()=>{ PG.painting=false; });
+  $("pgTools").querySelectorAll(".seg-btn").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      PG.tool=b.dataset.tool;
+      $("pgTools").querySelectorAll(".seg-btn").forEach(x=>x.classList.toggle("is-active",x===b));
+    });
+  });
+  $("pgNew").addEventListener("click", ()=>{
+    const w=Math.min(64,Math.max(8,parseInt($("pgW").value,10)||20));
+    const h=Math.min(64,Math.max(8,parseInt($("pgH").value,10)||20));
+    $("pgW").value=w; $("pgH").value=h;
+    pgInit(w,h);
+  });
+  $("pgClear").addEventListener("click", ()=>pgInit(PG.W,PG.H));
+  window.addEventListener("resize", ()=>pgDraw());
+
+  // Die Engine hat eine feste Weltgroesse. Sobald sie aus /api/status bekannt
+  // ist, uebernimmt der Playground sie und sperrt die Maße.
+  let pgSizeLocked=false;
+  function ensureWorldSize(w,h){
+    if(pgSizeLocked || !w || !h) return;
+    pgSizeLocked=true;
+    $("pgW").value=w; $("pgH").value=h;
+    $("pgW").readOnly=true; $("pgH").readOnly=true;
+    $("pgW").style.opacity=.6; $("pgH").style.opacity=.6;
+    const note=$("pgSizeNote");
+    if(note) note.textContent="Weltgröße ist durch die Engine fest ("+w+"×"+h+").";
+    pgInit(w,h);
+  }
+
+  // Modell-Auswahl des Playgrounds aus der Bibliothek befuellen
+  function syncPlaygroundModels(){
+    const sel=$("pgModel"); if(!sel) return;
+    const prev=sel.value;
+    sel.innerHTML = models.length
+      ? models.map(m=>'<option value="'+esc(String(m.id))+'">'+esc(m.name)+'</option>').join("")
+      : '<option value="">– Bibliothek leer –</option>';
+    if(prev && models.some(m=>String(m.id)===prev)) sel.value=prev;
+  }
+
+  $("pgRun").addEventListener("click", async ()=>{
+    const modelId=$("pgModel").value;
+    if(!modelId){ pgMsg("Kein Modell verfügbar — speichere zuerst im Training ein Modell.","err"); return; }
+    const walls=[], food=[];
+    for(let i=0;i<PG.cells.length;i++){
+      if(PG.cells[i]===1) walls.push(i);
+      else if(PG.cells[i]===2) food.push(i);
+    }
+    if(!food.length){ pgMsg("Die Karte enthält noch keine Nahrung.","err"); return; }
+    const body={
+      model:modelId, w:PG.W, h:PG.H,
+      walls, food, start:PG.start,
+      maxSteps: Math.min(5000,Math.max(50,parseInt($("pgSteps").value,10)||1000)),
+      foodReward: Math.max(0, parseFloat($("pgFoodReward").value)||0),
+      stepCost: parseFloat($("pgStepCost").value)||0,
+    };
+    const btn=$("pgRun"); btn.disabled=true; pgMsg("Episode läuft…","");
+    try{
+      const r=await fetch(API.playgroundRun,{method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const rep=await r.json();
+      if(!rep.frames || !rep.frames.length) throw new Error("Antwort enthält kein Replay");
+      $("pgResult").hidden=false;
+      pgPlayer.setReplay(rep);
+      pgMsg("Fertig: "+fmt(rep.food,0)+" Nahrung in "+fmt(rep.steps,0)+" Schritten.","ok");
+      $("pgResult").scrollIntoView({behavior:"smooth",block:"start"});
+    }catch(e){
+      pgMsg("Konnte Episode nicht starten ("+e.message+"). Backend-Endpunkt POST /api/playground/run nötig.","err");
+    }finally{ btn.disabled=false; }
+  });
+
+  pgInit(20,20);   // Startkarte
+
   $("modelsRefresh").addEventListener("click", ()=>refreshModels(true));
 
-  return { refreshModels };
+  return { refreshModels, redrawPlayground: pgDraw, ensureWorldSize };
 })();
 
 /* ---------- Start ---------- */

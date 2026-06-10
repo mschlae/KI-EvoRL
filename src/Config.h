@@ -13,7 +13,7 @@ constexpr int   OBSTACLE_COUNT = 5;
 // ----- Reward Shaping -----
 constexpr float START_ENERGY = 80.0f;   // mehr Startenergie -> längere Episoden früh
 constexpr float STEP_COST = 4.5f;    // geringer -> Agent wird nicht für Bewegung bestraft
-constexpr float WALL_PENALTY = -20.0f;  // harte Strafe für Wandkollisionen
+constexpr float WALL_PENALTY = -200.0f;  // harte Strafe für Wandkollisionen
 constexpr float FOOD_REWARD = 150.0f;  // höher -> klares Lernsignal
 constexpr float EXPLORATION_BONUS = 0.2f;    // kleiner Anreiz für neue Zellen
 constexpr float NEW_ZONE_BONUS = 1.5f;    // Zonenbonus erhöht

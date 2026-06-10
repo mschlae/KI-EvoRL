@@ -269,6 +269,15 @@ void Evolution::train() {
             break;
         }
 
+        // Vom Dashboard vorgemerktes Modell uebernehmen (Home -> "In Training laden").
+        // Es ersetzt das schwaechste Individuum und wird in dieser Generation
+        // ganz normal mitbewertet.
+        if (monitor_) {
+            Brain loaded;
+            if (monitor_->takePendingLoad(loaded) && !population.empty())
+                population.back() = loaded;
+        }
+
         float progress = float(generation) / GENERATIONS;
 
         // Curriculum
@@ -401,6 +410,9 @@ void Evolution::train() {
             }
             monitor_->update(rec, globalBest.baseFitness, globalBest.food,
                 g_curriculum_difficulty, inject, GENERATIONS);
+
+            // Aktuell bestes, sauberes Brain fuer Speichern/Vorfuehren/Playground.
+            monitor_->setBestBrain(globalBestBase, generation + 1);
         }
 
         // ---- Neue Generation erzeugen ----
