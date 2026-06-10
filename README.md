@@ -98,6 +98,6 @@ The dashboard is compiled as a string in `src/DashboardHtml.cpp` so the executab
 
 This project is licensed under the **Creative Commons Attribution 4.0 International License (CC BY 4.0)**.
 
-You are free to use, modify, and distribute this code, provided you give appropriate credit to the original author and include a copy of the license.
+You are free to use, modify, and distribute this code.
 
 See [LICENSE](LICENSE) for the full license text.
