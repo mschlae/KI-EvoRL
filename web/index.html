@@ -3,840 +3,1338 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>EvoRL · Trainings-Monitor</title>
+    <title>EvoRL · Mission Control</title>
     <style>
-        :root {
-            --ink: #0a0e13; /* Hintergrund          */
-            --panel: #121922; /* Kartenflaeche        */
-            --panel-2: #0e151d; /* tiefer gesetzt       */
-            --line: #1f2b38; /* Rahmen / Raster      */
-            --txt: #dfe7ef; /* Primaertext          */
-            --muted: #6b7d90; /* Sekundaertext        */
-            --amber: #f5a623; /* Hauptsignal          */
-            --teal: #2dd4bf; /* Zweitsignal          */
-            --rose: #f43f5e; /* Warnung / Inject     */
-            --grid-radius: 14px;
-        }
-
-        * {
-            box-sizing: border-box
-        }
-
-        html, body {
-            margin: 0;
-            height: 100%
-        }
-
-        body {
-            background: radial-gradient(1200px 600px at 80% -10%, #15202c 0%, transparent 60%), var(--ink);
-            color: var(--txt);
-            font-family: "Inter","Segoe UI",system-ui,sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        .mono {
-            font-family: "JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace
-        }
-
-        header {
-            display: flex;
-            align-items: baseline;
-            gap: 16px;
-            flex-wrap: wrap;
-            padding: 22px 28px;
-            border-bottom: 1px solid var(--line);
-        }
-
-            header h1 {
-                margin: 0;
-                font-size: 20px;
-                font-weight: 600;
-                letter-spacing: .02em;
-            }
-
-                header h1 .dot {
-                    color: var(--amber)
-                }
-
-            header .sub {
-                color: var(--muted);
-                font-size: 13px
-            }
-
-        .status-pill {
-            margin-left: auto;
-            display: inline-flex;
-            align-items: center;
-            gap: 9px;
-            padding: 7px 14px;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            font-size: 12.5px;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            color: var(--muted);
-        }
-
-            .status-pill .led {
-                width: 9px;
-                height: 9px;
-                border-radius: 50%;
-                background: var(--muted)
-            }
-
-            .status-pill.live .led {
-                background: var(--teal);
-                box-shadow: 0 0 0 0 rgba(45,212,191,.5);
-                animation: pulse 1.6s infinite
-            }
-
-            .status-pill.live {
-                color: var(--teal);
-                border-color: #1c3a37
-            }
-
-            .status-pill.done .led {
-                background: var(--amber)
-            }
-
-            .status-pill.done {
-                color: var(--amber);
-                border-color: #3a3017
-            }
-
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(45,212,191,.45)
-            }
-
-            70% {
-                box-shadow: 0 0 0 8px rgba(45,212,191,0)
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(45,212,191,0)
-            }
-        }
-
-        /* Stop-Button (aktive Steuerung) */
-        .btn-stop {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 7px 16px;
-            border: 1px solid #5b2330;
-            border-radius: 999px;
-            background: linear-gradient(180deg,#2a151b,#1c0f13);
-            color: var(--rose);
-            font-family: inherit;
-            font-size: 12.5px;
-            font-weight: 600;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background .15s,color .15s,border-color .15s;
-        }
-
-            .btn-stop:hover {
-                background: var(--rose);
-                color: #fff;
-                border-color: var(--rose)
-            }
-
-            .btn-stop:disabled {
-                opacity: .6;
-                cursor: default;
-                color: var(--muted);
-                border-color: var(--line);
-                background: var(--panel-2)
-            }
-
-                .btn-stop:disabled:hover {
-                    background: var(--panel-2);
-                    color: var(--muted)
-                }
-
-            .btn-stop[hidden] {
-                display: none
-            }
-
-        main {
-            padding: 24px 28px 48px;
-            max-width: 1280px;
-            margin: 0 auto
-        }
-
-        /* Parameter-Panel (Live-Tuning) */
-        .config {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: var(--grid-radius);
-            padding: 16px 18px;
-            margin-bottom: 26px
-        }
-
-        .config-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 14px
-        }
-
-            .config-head h2 {
-                margin: 0;
-                font-size: 13.5px;
-                font-weight: 600;
-                letter-spacing: .02em
-            }
-
-            .config-head .hint {
-                color: var(--muted);
-                font-size: 12px
-            }
-
-        .config-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
-            gap: 13px
-        }
-
-        .field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px
-        }
-
-            .field label {
-                color: var(--muted);
-                font-size: 11px;
-                letter-spacing: .06em;
-                text-transform: uppercase
-            }
-
-            .field input {
-                background: var(--panel-2);
-                border: 1px solid var(--line);
-                border-radius: 9px;
-                color: var(--txt);
-                font-family: "JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
-                font-size: 15px;
-                padding: 9px 11px;
-                width: 100%;
-                outline: none;
-                transition: border-color .15s,box-shadow .15s;
-            }
-
-                .field input:focus {
-                    border-color: var(--amber);
-                    box-shadow: 0 0 0 3px rgba(245,166,35,.15)
-                }
-                /* native Spinner ausblenden -> reine Tastatureingabe */
-                .field input::-webkit-outer-spin-button, .field input::-webkit-inner-spin-button {
-                    -webkit-appearance: none;
-                    margin: 0
-                }
-
-                .field input[type=number] {
-                    -moz-appearance: textfield
-                }
-
-        .config-actions {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-top: 16px;
-            flex-wrap: wrap
-        }
-
-        .btn-apply {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 20px;
-            border-radius: 999px;
-            border: 1px solid #6a4a13;
-            background: linear-gradient(180deg,#2a2113,#1b150c);
-            color: var(--amber);
-            font-family: inherit;
-            font-size: 12.5px;
-            font-weight: 600;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background .15s,color .15s,border-color .15s;
-        }
-
-            .btn-apply:hover {
-                background: var(--amber);
-                color: #0a0e13;
-                border-color: var(--amber)
-            }
-
-            .btn-apply:disabled {
-                opacity: .6;
-                cursor: default
-            }
-
-        .btn-ghost {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 18px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            background: var(--panel-2);
-            color: var(--muted);
-            font-family: inherit;
-            font-size: 12.5px;
-            font-weight: 600;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: color .15s,border-color .15s;
-        }
-
-            .btn-ghost:hover {
-                color: var(--txt);
-                border-color: #2c3a48
-            }
-
-        .cfg-msg {
-            font-size: 12.5px;
-            color: var(--muted)
-        }
-
-            .cfg-msg.ok {
-                color: var(--teal)
-            }
-
-            .cfg-msg.err {
-                color: var(--rose)
-            }
-
-        /* Generations-Fortschritt */
-        .progress-wrap {
-            margin-bottom: 24px
-        }
-
-        .progress-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 8px
-        }
-
-            .progress-head .gen {
-                font-size: 15px
-            }
-
-                .progress-head .gen b {
-                    font-size: 22px;
-                    font-weight: 600
-                }
-
-            .progress-head .pct {
-                color: var(--muted);
-                font-size: 13px
-            }
-
-        .bar {
-            height: 6px;
-            background: var(--panel-2);
-            border-radius: 999px;
-            overflow: hidden;
-            border: 1px solid var(--line)
-        }
-
-            .bar > span {
-                display: block;
-                height: 100%;
-                width: 0;
-                background: linear-gradient(90deg,var(--amber),#ffcf6b);
-                transition: width .4s ease
-            }
-
-        /* Kennzahlen-Raster */
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
-            gap: 14px;
-            margin-bottom: 26px
-        }
-
-        .card {
-            background: linear-gradient(180deg,var(--panel),var(--panel-2));
-            border: 1px solid var(--line);
-            border-radius: var(--grid-radius);
-            padding: 16px 18px;
-            position: relative;
-            overflow: hidden;
-        }
-
-            .card .label {
-                color: var(--muted);
-                font-size: 11.5px;
-                letter-spacing: .07em;
-                text-transform: uppercase
-            }
-
-            .card .value {
-                margin-top: 8px;
-                font-size: 28px;
-                font-weight: 600;
-                line-height: 1
-            }
-
-            .card .unit {
-                color: var(--muted);
-                font-size: 13px;
-                margin-left: 4px;
-                font-weight: 400
-            }
-
-            .card.accent .value {
-                color: var(--amber)
-            }
-
-            .card.teal .value {
-                color: var(--teal)
-            }
-
-            .card::after {
-                content: "";
-                position: absolute;
-                inset: 0 0 auto 0;
-                height: 2px;
-                background: var(--line)
-            }
-
-            .card.accent::after {
-                background: linear-gradient(90deg,var(--amber),transparent)
-            }
-
-            .card.teal::after {
-                background: linear-gradient(90deg,var(--teal),transparent)
-            }
-
-        /* Live-Replay-Arena */
-        .arena {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: var(--grid-radius);
-            padding: 18px 20px 16px;
-            margin-bottom: 26px
-        }
-
-        .arena-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
-            flex-wrap: wrap;
-            margin-bottom: 14px
-        }
-
-            .arena-head h2 {
-                margin: 0;
-                font-size: 13.5px;
-                font-weight: 600;
-                letter-spacing: .02em
-            }
-
-        .arena-explain {
-            margin: 7px 0 0;
-            max-width: 62ch;
-            color: var(--muted);
-            font-size: 12.5px;
-            line-height: 1.55
-        }
-
-            .arena-explain b {
-                color: var(--teal);
-                font-weight: 600
-            }
-
-            .arena-explain .hi-food {
-                color: var(--amber);
-                font-weight: 600
-            }
-
-        .arena-meta {
-            color: var(--muted);
-            font-size: 12.5px;
-            white-space: nowrap
-        }
-
-        #arenaCanvas {
-            width: 100%;
-            max-width: 520px;
-            aspect-ratio: 1/1;
-            height: auto;
-            display: block;
-            margin: 0 auto;
-            background: radial-gradient(120% 120% at 50% 0%, #101a24 0%, var(--panel-2) 70%);
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 8px 30px rgba(0,0,0,.35)
-        }
-
-        .arena-bar {
-            max-width: 520px;
-            margin: 12px auto 0;
-            height: 4px;
-            background: var(--panel-2);
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            overflow: hidden
-        }
-
-            .arena-bar > span {
-                display: block;
-                height: 100%;
-                width: 0;
-                border-radius: 999px;
-                background: linear-gradient(90deg,var(--teal),#7af0e1);
-                transition: width .12s linear
-            }
-
-        .arena-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 14px
-        }
-
-        .arena-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 7px 14px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            background: var(--panel-2);
-            color: var(--txt);
-            font-family: inherit;
-            font-size: 12.5px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: border-color .15s,color .15s
-        }
-
-            .arena-btn:hover {
-                border-color: #2c3a48;
-                color: #fff
-            }
-
-        .seg {
-            display: inline-flex;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            overflow: hidden;
-            background: var(--panel-2)
-        }
-
-        .seg-btn {
-            padding: 7px 13px;
-            border: 0;
-            background: transparent;
-            color: var(--muted);
-            font-family: inherit;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: color .15s,background .15s
-        }
-
-            .seg-btn.is-active {
-                background: var(--teal);
-                color: #06231f
-            }
-
-        .gen-select {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--muted);
-            font-size: 11.5px;
-            letter-spacing: .04em;
-            text-transform: uppercase
-        }
-
-            .gen-select select {
-                background: var(--panel-2);
-                border: 1px solid var(--line);
-                border-radius: 999px;
-                color: var(--txt);
-                font-family: "JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
-                font-size: 12.5px;
-                padding: 7px 30px 7px 13px;
-                cursor: pointer;
-                outline: none;
-                text-transform: none;
-                letter-spacing: 0;
-                -webkit-appearance: none;
-                appearance: none;
-                background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%236b7d90' stroke-width='1.5' stroke-linecap='round'/></svg>");
-                background-repeat: no-repeat;
-                background-position: right 11px center;
-                transition: border-color .15s;
-            }
-
-                .gen-select select:focus {
-                    border-color: var(--teal)
-                }
-
-        .arena-stat {
-            font-size: 12.5px;
-            color: var(--muted);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px
-        }
-
-            .arena-stat .dim {
-                opacity: .55
-            }
-
-            .arena-stat .dot-food {
-                display: inline-block;
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: var(--amber)
-            }
-
-        .arena-legend {
-            display: flex;
-            gap: 18px;
-            justify-content: center;
-            margin-top: 14px;
-            font-size: 12px;
-            color: var(--muted);
-            flex-wrap: wrap
-        }
-
-            .arena-legend .sw {
-                display: inline-block;
-                width: 11px;
-                height: 11px;
-                border-radius: 3px;
-                margin-right: 6px;
-                vertical-align: middle
-            }
-
-            .arena-legend .agent {
-                background: var(--teal)
-            }
-
-            .arena-legend .food {
-                background: var(--amber);
-                border-radius: 50%
-            }
-
-            .arena-legend .trail {
-                background: rgba(45,212,191,.35)
-            }
-
-            .arena-legend .wall {
-                background: #23303d
-            }
-
-        /* Charts */
-        .charts {
-            display: grid;
-            grid-template-columns: repeat(3,1fr);
-            gap: 18px
-        }
-
-        @media(max-width:980px) {
-            .charts {
-                grid-template-columns: 1fr 1fr
-            }
-        }
-
-        @media(max-width:640px) {
-            .charts {
-                grid-template-columns: 1fr
-            }
-        }
-
-        .chart {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: var(--grid-radius);
-            padding: 16px 18px 10px;
-        }
-
-            .chart h2 {
-                margin: 0 0 2px;
-                font-size: 13.5px;
-                font-weight: 600;
-                letter-spacing: .02em
-            }
-
-            .chart .legend {
-                display: flex;
-                gap: 16px;
-                margin: 4px 0 10px;
-                font-size: 12px;
-                color: var(--muted)
-            }
-
-                .chart .legend i {
-                    display: inline-block;
-                    width: 10px;
-                    height: 2px;
-                    margin-right: 6px;
-                    vertical-align: middle
-                }
-
-        canvas {
-            width: 100%;
-            height: 230px;
-            display: block
-        }
-
-        footer {
-            color: var(--muted);
-            font-size: 12px;
-            text-align: center;
-            padding: 18px;
-            border-top: 1px solid var(--line)
-        }
-
-        .err {
-            color: var(--rose)
-        }
+           /* ============================================================
+        EvoRL Mission Control - Design-Token
+        Eine Quelle fuer Farben/Radien/Typo. Neue Views nutzen NUR
+        diese Variablen, damit das Frontend konsistent erweiterbar
+        bleibt.
+        ============================================================ */
+           :root {
+               --ink: #0a0e13; /* App-Hintergrund      */
+               --panel: #121922; /* Kartenflaeche        */
+               --panel-2: #0e151d; /* tiefer gesetzt       */
+               --line: #1f2b38; /* Rahmen / Raster      */
+               --txt: #dfe7ef; /* Primaertext          */
+               --muted: #6b7d90; /* Sekundaertext        */
+               --amber: #f5a623; /* Hauptsignal          */
+               --teal: #2dd4bf; /* Zweitsignal          */
+               --rose: #f43f5e; /* Warnung / Stop       */
+               --violet: #a78bfa; /* Analyse              */
+               --radius: 14px;
+               --side-w: 212px;
+           }
+
+           * {
+               box-sizing: border-box
+           }
+
+           html, body {
+               margin: 0;
+               height: 100%
+           }
+
+           body {
+               background: radial-gradient(1200px 600px at 80% -10%, #15202c 0%, transparent 60%), var(--ink);
+               color: var(--txt);
+               font-family: "Inter","Segoe UI",system-ui,sans-serif;
+               -webkit-font-smoothing: antialiased;
+           }
+
+           .mono {
+               font-family: "JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace
+           }
+
+           button {
+               font-family: inherit
+           }
+
+           :focus-visible {
+               outline: 2px solid var(--teal);
+               outline-offset: 2px;
+               border-radius: 6px
+           }
+
+           @media (prefers-reduced-motion: reduce) {
+               *, *::before, *::after {
+                   animation: none !important;
+                   transition: none !important
+               }
+           }
+
+           /* ---------- App-Geruest: Seitenleiste + Inhalt ---------- */
+           .app {
+               display: flex;
+               min-height: 100vh
+           }
+
+           .side {
+               width: var(--side-w);
+               flex: 0 0 auto;
+               border-right: 1px solid var(--line);
+               background: linear-gradient(180deg,#0d141c, #0a0e13 70%);
+               display: flex;
+               flex-direction: column;
+               gap: 6px;
+               padding: 20px 14px;
+               position: sticky;
+               top: 0;
+               height: 100vh;
+           }
+
+           .brand {
+               display: flex;
+               align-items: center;
+               gap: 10px;
+               padding: 2px 8px 18px
+           }
+
+               .brand .glyph {
+                   width: 30px;
+                   height: 30px;
+                   border-radius: 9px;
+                   flex: 0 0 auto;
+                   background: radial-gradient(5px 5px at 30% 35%, var(--teal) 40%, transparent 41%), radial-gradient(5px 5px at 68% 62%, var(--amber) 40%, transparent 41%), linear-gradient(135deg,#16222e,#0e151d);
+                   border: 1px solid var(--line);
+               }
+
+               .brand .name {
+                   font-size: 16px;
+                   font-weight: 600;
+                   letter-spacing: .02em
+               }
+
+                   .brand .name .dot {
+                       color: var(--amber)
+                   }
+
+               .brand .tag {
+                   display: block;
+                   color: var(--muted);
+                   font-size: 10.5px;
+                   letter-spacing: .08em;
+                   text-transform: uppercase;
+                   margin-top: 2px
+               }
+
+           .nav {
+               display: flex;
+               flex-direction: column;
+               gap: 4px
+           }
+
+           .nav-label {
+               color: var(--muted);
+               font-size: 10.5px;
+               letter-spacing: .1em;
+               text-transform: uppercase;
+               padding: 10px 10px 6px
+           }
+
+           .nav a {
+               display: flex;
+               align-items: center;
+               gap: 11px;
+               padding: 10px 12px;
+               border-radius: 10px;
+               color: var(--muted);
+               text-decoration: none;
+               font-size: 14px;
+               font-weight: 500;
+               border: 1px solid transparent;
+               transition: color .15s,background .15s,border-color .15s;
+           }
+
+               .nav a:hover {
+                   color: var(--txt);
+                   background: rgba(255,255,255,.025)
+               }
+
+               .nav a.is-active {
+                   color: var(--txt);
+                   background: var(--panel);
+                   border-color: var(--line)
+               }
+
+                   .nav a.is-active .nav-ico {
+                       color: var(--amber)
+                   }
+
+           .nav-ico {
+               width: 18px;
+               height: 18px;
+               flex: 0 0 auto;
+               color: var(--muted);
+               transition: color .15s
+           }
+
+           .nav a .hint {
+               margin-left: auto;
+               font-size: 10px;
+               color: var(--muted);
+               opacity: .7
+           }
+
+           .side-foot {
+               margin-top: auto;
+               display: flex;
+               flex-direction: column;
+               gap: 10px;
+               padding: 0 4px
+           }
+
+           .status-pill {
+               display: inline-flex;
+               align-items: center;
+               gap: 9px;
+               padding: 8px 13px;
+               border: 1px solid var(--line);
+               border-radius: 999px;
+               font-size: 11.5px;
+               letter-spacing: .05em;
+               text-transform: uppercase;
+               color: var(--muted);
+               background: var(--panel-2);
+           }
+
+               .status-pill .led {
+                   width: 8px;
+                   height: 8px;
+                   border-radius: 50%;
+                   background: var(--muted);
+                   flex: 0 0 auto
+               }
+
+               .status-pill.live .led {
+                   background: var(--teal);
+                   box-shadow: 0 0 0 0 rgba(45,212,191,.5);
+                   animation: pulse 1.6s infinite
+               }
+
+               .status-pill.live {
+                   color: var(--teal);
+                   border-color: #1c3a37
+               }
+
+               .status-pill.done .led {
+                   background: var(--amber)
+               }
+
+               .status-pill.done {
+                   color: var(--amber);
+                   border-color: #3a3017
+               }
+
+           @keyframes pulse {
+               0% {
+                   box-shadow: 0 0 0 0 rgba(45,212,191,.45)
+               }
+
+               70% {
+                   box-shadow: 0 0 0 8px rgba(45,212,191,0)
+               }
+
+               100% {
+                   box-shadow: 0 0 0 0 rgba(45,212,191,0)
+               }
+           }
+
+           .side-conn {
+               color: var(--muted);
+               font-size: 11px;
+               padding: 0 6px;
+               min-height: 14px
+           }
+
+           .err {
+               color: var(--rose)
+           }
+
+           .content {
+               flex: 1;
+               min-width: 0;
+               display: flex;
+               flex-direction: column
+           }
+
+           .topbar {
+               display: flex;
+               align-items: center;
+               gap: 16px;
+               flex-wrap: wrap;
+               padding: 18px 28px;
+               border-bottom: 1px solid var(--line);
+           }
+
+               .topbar h1 {
+                   margin: 0;
+                   font-size: 18px;
+                   font-weight: 600;
+                   letter-spacing: .02em
+               }
+
+               .topbar .sub {
+                   color: var(--muted);
+                   font-size: 12.5px
+               }
+
+               .topbar .spacer {
+                   margin-left: auto
+               }
+
+           main {
+               padding: 24px 28px 48px;
+               max-width: 1280px;
+               width: 100%;
+               margin: 0 auto
+           }
+
+           /* Views: genau eine ist sichtbar. Neue Bereiche = neue <section class="view"> + Eintrag in VIEWS. */
+           .view {
+               display: none
+           }
+
+               .view.is-active {
+                   display: block;
+                   animation: viewIn .25s ease
+               }
+
+           @keyframes viewIn {
+               from {
+                   opacity: 0;
+                   transform: translateY(4px)
+               }
+
+               to {
+                   opacity: 1;
+                   transform: none
+               }
+           }
+
+           /* ---------- Bausteine ---------- */
+           .panel {
+               background: var(--panel);
+               border: 1px solid var(--line);
+               border-radius: var(--radius);
+               padding: 16px 18px;
+               margin-bottom: 24px
+           }
+
+           .panel-head {
+               display: flex;
+               justify-content: space-between;
+               align-items: baseline;
+               gap: 12px;
+               flex-wrap: wrap;
+               margin-bottom: 14px
+           }
+
+               .panel-head h2 {
+                   margin: 0;
+                   font-size: 13.5px;
+                   font-weight: 600;
+                   letter-spacing: .02em
+               }
+
+               .panel-head .hint {
+                   color: var(--muted);
+                   font-size: 12px
+               }
+
+           .btn {
+               display: inline-flex;
+               align-items: center;
+               gap: 8px;
+               padding: 8px 16px;
+               border-radius: 999px;
+               border: 1px solid var(--line);
+               background: var(--panel-2);
+               color: var(--txt);
+               font-size: 12.5px;
+               font-weight: 600;
+               letter-spacing: .03em;
+               cursor: pointer;
+               transition: color .15s,border-color .15s,background .15s;
+           }
+
+               .btn:hover {
+                   border-color: #2c3a48;
+                   color: #fff
+               }
+
+               .btn:disabled {
+                   opacity: .55;
+                   cursor: default
+               }
+
+               .btn.primary {
+                   border-color: #6a4a13;
+                   background: linear-gradient(180deg,#2a2113,#1b150c);
+                   color: var(--amber);
+                   text-transform: uppercase
+               }
+
+                   .btn.primary:hover {
+                       background: var(--amber);
+                       color: #0a0e13;
+                       border-color: var(--amber)
+                   }
+
+               .btn.danger {
+                   border-color: #5b2330;
+                   background: linear-gradient(180deg,#2a151b,#1c0f13);
+                   color: var(--rose);
+                   text-transform: uppercase
+               }
+
+                   .btn.danger:hover {
+                       background: var(--rose);
+                       color: #fff;
+                       border-color: var(--rose)
+                   }
+
+               .btn.ghost {
+                   color: var(--muted);
+                   font-weight: 600;
+                   text-transform: uppercase
+               }
+
+                   .btn.ghost:hover {
+                       color: var(--txt)
+                   }
+
+               .btn.small {
+                   padding: 6px 12px;
+                   font-size: 12px
+               }
+
+           /* Kennzahlen-Karten */
+           .cards {
+               display: grid;
+               grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+               gap: 14px;
+               margin-bottom: 24px
+           }
+
+           .card {
+               background: linear-gradient(180deg,var(--panel),var(--panel-2));
+               border: 1px solid var(--line);
+               border-radius: var(--radius);
+               padding: 16px 18px;
+               position: relative;
+               overflow: hidden;
+           }
+
+               .card .label {
+                   color: var(--muted);
+                   font-size: 11.5px;
+                   letter-spacing: .07em;
+                   text-transform: uppercase
+               }
+
+               .card .value {
+                   margin-top: 8px;
+                   font-size: 28px;
+                   font-weight: 600;
+                   line-height: 1
+               }
+
+               .card .unit {
+                   color: var(--muted);
+                   font-size: 13px;
+                   margin-left: 4px;
+                   font-weight: 400
+               }
+
+               .card.accent .value {
+                   color: var(--amber)
+               }
+
+               .card.teal .value {
+                   color: var(--teal)
+               }
+
+               .card.violet .value {
+                   color: var(--violet)
+               }
+
+               .card::after {
+                   content: "";
+                   position: absolute;
+                   inset: 0 0 auto 0;
+                   height: 2px;
+                   background: var(--line)
+               }
+
+               .card.accent::after {
+                   background: linear-gradient(90deg,var(--amber),transparent)
+               }
+
+               .card.teal::after {
+                   background: linear-gradient(90deg,var(--teal),transparent)
+               }
+
+               .card.violet::after {
+                   background: linear-gradient(90deg,var(--violet),transparent)
+               }
+
+           /* Fortschritt */
+           .progress-wrap {
+               margin-bottom: 24px
+           }
+
+           .progress-head {
+               display: flex;
+               justify-content: space-between;
+               align-items: baseline;
+               margin-bottom: 8px
+           }
+
+               .progress-head .gen {
+                   font-size: 15px
+               }
+
+                   .progress-head .gen b {
+                       font-size: 22px;
+                       font-weight: 600
+                   }
+
+               .progress-head .pct {
+                   color: var(--muted);
+                   font-size: 13px
+               }
+
+           .bar {
+               height: 6px;
+               background: var(--panel-2);
+               border-radius: 999px;
+               overflow: hidden;
+               border: 1px solid var(--line)
+           }
+
+               .bar > span {
+                   display: block;
+                   height: 100%;
+                   width: 0;
+                   background: linear-gradient(90deg,var(--amber),#ffcf6b);
+                   transition: width .4s ease
+               }
+
+           /* Parameter-Panel */
+           .config-grid {
+               display: grid;
+               grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+               gap: 13px
+           }
+
+           .field {
+               display: flex;
+               flex-direction: column;
+               gap: 6px
+           }
+
+               .field label {
+                   color: var(--muted);
+                   font-size: 11px;
+                   letter-spacing: .06em;
+                   text-transform: uppercase
+               }
+
+               .field input {
+                   background: var(--panel-2);
+                   border: 1px solid var(--line);
+                   border-radius: 9px;
+                   color: var(--txt);
+                   font-family: "JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+                   font-size: 15px;
+                   padding: 9px 11px;
+                   width: 100%;
+                   outline: none;
+                   transition: border-color .15s,box-shadow .15s;
+               }
+
+                   .field input:focus {
+                       border-color: var(--amber);
+                       box-shadow: 0 0 0 3px rgba(245,166,35,.15)
+                   }
+
+                   .field input::-webkit-outer-spin-button, .field input::-webkit-inner-spin-button {
+                       -webkit-appearance: none;
+                       margin: 0
+                   }
+
+                   .field input[type=number] {
+                       -moz-appearance: textfield
+                   }
+
+           .config-actions {
+               display: flex;
+               align-items: center;
+               gap: 14px;
+               margin-top: 16px;
+               flex-wrap: wrap
+           }
+
+           .cfg-msg {
+               font-size: 12.5px;
+               color: var(--muted)
+           }
+
+               .cfg-msg.ok {
+                   color: var(--teal)
+               }
+
+               .cfg-msg.err {
+                   color: var(--rose)
+               }
+
+           /* Arena (wiederverwendbar fuer Training-Replay UND Home-Demo) */
+           .arena-canvas {
+               width: 100%;
+               max-width: 520px;
+               aspect-ratio: 1/1;
+               height: auto;
+               display: block;
+               margin: 0 auto;
+               background: radial-gradient(120% 120% at 50% 0%, #101a24 0%, var(--panel-2) 70%);
+               border: 1px solid var(--line);
+               border-radius: 12px;
+               box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 8px 30px rgba(0,0,0,.35)
+           }
+
+           .arena-bar {
+               max-width: 520px;
+               margin: 12px auto 0;
+               height: 4px;
+               background: var(--panel-2);
+               border: 1px solid var(--line);
+               border-radius: 999px;
+               overflow: hidden
+           }
+
+               .arena-bar > span {
+                   display: block;
+                   height: 100%;
+                   width: 0;
+                   border-radius: 999px;
+                   background: linear-gradient(90deg,var(--teal),#7af0e1);
+                   transition: width .12s linear
+               }
+
+           .arena-controls {
+               display: flex;
+               align-items: center;
+               gap: 10px;
+               justify-content: center;
+               flex-wrap: wrap;
+               margin-top: 14px
+           }
+
+           .seg {
+               display: inline-flex;
+               border: 1px solid var(--line);
+               border-radius: 999px;
+               overflow: hidden;
+               background: var(--panel-2)
+           }
+
+           .seg-btn {
+               padding: 7px 13px;
+               border: 0;
+               background: transparent;
+               color: var(--muted);
+               font-size: 12px;
+               font-weight: 600;
+               cursor: pointer;
+               transition: color .15s,background .15s
+           }
+
+               .seg-btn.is-active {
+                   background: var(--teal);
+                   color: #06231f
+               }
+
+           .gen-select {
+               display: inline-flex;
+               align-items: center;
+               gap: 8px;
+               color: var(--muted);
+               font-size: 11.5px;
+               letter-spacing: .04em;
+               text-transform: uppercase
+           }
+
+               .gen-select select {
+                   background: var(--panel-2);
+                   border: 1px solid var(--line);
+                   border-radius: 999px;
+                   color: var(--txt);
+                   font-family: "JetBrains Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+                   font-size: 12.5px;
+                   padding: 7px 30px 7px 13px;
+                   cursor: pointer;
+                   outline: none;
+                   text-transform: none;
+                   letter-spacing: 0;
+                   -webkit-appearance: none;
+                   appearance: none;
+                   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%236b7d90' stroke-width='1.5' stroke-linecap='round'/></svg>");
+                   background-repeat: no-repeat;
+                   background-position: right 11px center;
+                   transition: border-color .15s;
+               }
+
+                   .gen-select select:focus {
+                       border-color: var(--teal)
+                   }
+
+           .arena-stat {
+               font-size: 12.5px;
+               color: var(--muted);
+               display: inline-flex;
+               align-items: center;
+               gap: 6px
+           }
+
+               .arena-stat .dim {
+                   opacity: .55
+               }
+
+               .arena-stat .dot-food {
+                   display: inline-block;
+                   width: 8px;
+                   height: 8px;
+                   border-radius: 50%;
+                   background: var(--amber)
+               }
+
+           .arena-legend {
+               display: flex;
+               gap: 18px;
+               justify-content: center;
+               margin-top: 14px;
+               font-size: 12px;
+               color: var(--muted);
+               flex-wrap: wrap
+           }
+
+               .arena-legend .sw {
+                   display: inline-block;
+                   width: 11px;
+                   height: 11px;
+                   border-radius: 3px;
+                   margin-right: 6px;
+                   vertical-align: middle
+               }
+
+               .arena-legend .agent {
+                   background: var(--teal)
+               }
+
+               .arena-legend .food {
+                   background: var(--amber);
+                   border-radius: 50%
+               }
+
+               .arena-legend .trail {
+                   background: rgba(45,212,191,.35)
+               }
+
+               .arena-legend .wall {
+                   background: #23303d
+               }
+
+           .arena-meta {
+               color: var(--muted);
+               font-size: 12.5px;
+               white-space: nowrap
+           }
+
+           .arena-explain {
+               margin: 7px 0 0;
+               max-width: 62ch;
+               color: var(--muted);
+               font-size: 12.5px;
+               line-height: 1.55
+           }
+
+               .arena-explain b {
+                   color: var(--teal);
+                   font-weight: 600
+               }
+
+               .arena-explain .hi-food {
+                   color: var(--amber);
+                   font-weight: 600
+               }
+
+           /* Charts */
+           .charts {
+               display: grid;
+               grid-template-columns: repeat(3,1fr);
+               gap: 18px
+           }
+
+           @media(max-width:980px) {
+               .charts {
+                   grid-template-columns: 1fr 1fr
+               }
+           }
+
+           @media(max-width:640px) {
+               .charts {
+                   grid-template-columns: 1fr
+               }
+           }
+
+           .chart {
+               background: var(--panel);
+               border: 1px solid var(--line);
+               border-radius: var(--radius);
+               padding: 16px 18px 10px
+           }
+
+               .chart h2 {
+                   margin: 0 0 2px;
+                   font-size: 13.5px;
+                   font-weight: 600;
+                   letter-spacing: .02em
+               }
+
+               .chart .legend {
+                   display: flex;
+                   gap: 16px;
+                   margin: 4px 0 10px;
+                   font-size: 12px;
+                   color: var(--muted)
+               }
+
+                   .chart .legend i {
+                       display: inline-block;
+                       width: 10px;
+                       height: 2px;
+                       margin-right: 6px;
+                       vertical-align: middle
+                   }
+
+               .chart canvas {
+                   width: 100%;
+                   height: 230px;
+                   display: block
+               }
+
+           /* ---------- Home: Modell-Bibliothek ---------- */
+           .model-grid {
+               display: grid;
+               grid-template-columns: repeat(auto-fill,minmax(240px,1fr));
+               gap: 14px
+           }
+
+           .model-card {
+               background: linear-gradient(180deg,var(--panel),var(--panel-2));
+               border: 1px solid var(--line);
+               border-radius: var(--radius);
+               padding: 16px;
+               display: flex;
+               flex-direction: column;
+               gap: 12px;
+               transition: border-color .15s,transform .15s;
+           }
+
+               .model-card:hover {
+                   border-color: #2c3a48;
+                   transform: translateY(-1px)
+               }
+
+               .model-card.is-active {
+                   border-color: var(--teal)
+               }
+
+               .model-card .mc-top {
+                   display: flex;
+                   align-items: flex-start;
+                   gap: 10px
+               }
+
+               .model-card .mc-name {
+                   font-size: 14px;
+                   font-weight: 600;
+                   line-height: 1.3;
+                   word-break: break-word
+               }
+
+               .model-card .mc-when {
+                   color: var(--muted);
+                   font-size: 11.5px;
+                   margin-top: 3px
+               }
+
+               .model-card .mc-badge {
+                   margin-left: auto;
+                   flex: 0 0 auto;
+                   font-size: 10.5px;
+                   letter-spacing: .06em;
+                   text-transform: uppercase;
+                   color: var(--muted);
+                   border: 1px solid var(--line);
+                   border-radius: 999px;
+                   padding: 4px 9px;
+                   background: var(--panel-2);
+               }
+
+                   .model-card .mc-badge.local {
+                       color: var(--violet);
+                       border-color: #3a3055
+                   }
+
+               .model-card .mc-stats {
+                   display: flex;
+                   gap: 14px;
+                   flex-wrap: wrap
+               }
+
+               .model-card .mc-stat .v {
+                   font-size: 17px;
+                   font-weight: 600
+               }
+
+               .model-card .mc-stat .k {
+                   color: var(--muted);
+                   font-size: 10.5px;
+                   letter-spacing: .06em;
+                   text-transform: uppercase;
+                   margin-top: 2px
+               }
+
+               .model-card .mc-stat.food .v {
+                   color: var(--amber)
+               }
+
+               .model-card .mc-actions {
+                   display: flex;
+                   gap: 8px;
+                   margin-top: auto;
+                   flex-wrap: wrap
+               }
+
+           .empty {
+               border: 1px dashed var(--line);
+               border-radius: var(--radius);
+               padding: 34px 22px;
+               text-align: center;
+               color: var(--muted);
+               background: var(--panel-2);
+           }
+
+               .empty h3 {
+                   margin: 0 0 8px;
+                   color: var(--txt);
+                   font-size: 14.5px;
+                   font-weight: 600
+               }
+
+               .empty p {
+                   margin: 0 auto 16px;
+                   font-size: 12.5px;
+                   line-height: 1.6;
+                   max-width: 56ch
+               }
+
+               .empty code {
+                   color: var(--teal);
+                   font-family: "JetBrains Mono",ui-monospace,monospace;
+                   font-size: 12px
+               }
+
+           /* Home: Analyse */
+           .ana-grid {
+               display: grid;
+               grid-template-columns: 1.1fr .9fr;
+               gap: 18px;
+               align-items: start
+           }
+
+           @media(max-width:900px) {
+               .ana-grid {
+                   grid-template-columns: 1fr
+               }
+           }
+
+           .heat-canvas {
+               width: 100%;
+               aspect-ratio: 1/1;
+               height: auto;
+               display: block;
+               background: var(--panel-2);
+               border: 1px solid var(--line);
+               border-radius: 12px
+           }
+
+           .ana-note {
+               color: var(--muted);
+               font-size: 12px;
+               margin-top: 10px;
+               line-height: 1.55
+           }
+
+           .kv {
+               display: grid;
+               grid-template-columns: repeat(auto-fit,minmax(130px,1fr));
+               gap: 12px
+           }
+
+               .kv .item {
+                   background: var(--panel-2);
+                   border: 1px solid var(--line);
+                   border-radius: 10px;
+                   padding: 12px 13px
+               }
+
+                   .kv .item .k {
+                       color: var(--muted);
+                       font-size: 10.5px;
+                       letter-spacing: .07em;
+                       text-transform: uppercase
+                   }
+
+                   .kv .item .v {
+                       font-size: 20px;
+                       font-weight: 600;
+                       margin-top: 6px
+                   }
+
+                   .kv .item.food .v {
+                       color: var(--amber)
+                   }
+
+                   .kv .item.teal .v {
+                       color: var(--teal)
+                   }
+
+                   .kv .item.violet .v {
+                       color: var(--violet)
+                   }
+
+           footer {
+               color: var(--muted);
+               font-size: 12px;
+               text-align: center;
+               padding: 18px;
+               border-top: 1px solid var(--line)
+           }
+
+           /* ---------- Mobil: Seitenleiste wird zur Topleiste ---------- */
+           @media(max-width:820px) {
+               .app {
+                   flex-direction: column
+               }
+
+               .side {
+                   width: 100%;
+                   height: auto;
+                   position: static;
+                   flex-direction: row;
+                   align-items: center;
+                   padding: 12px 16px;
+                   border-right: 0;
+                   border-bottom: 1px solid var(--line);
+                   gap: 14px
+               }
+
+               .brand {
+                   padding: 0
+               }
+
+                   .brand .tag {
+                       display: none
+                   }
+
+               .nav {
+                   flex-direction: row;
+                   gap: 6px
+               }
+
+               .nav-label {
+                   display: none
+               }
+
+               .nav a {
+                   padding: 8px 12px
+               }
+
+                   .nav a .hint {
+                       display: none
+                   }
+
+               .side-foot {
+                   margin: 0 0 0 auto;
+                   flex-direction: row;
+                   align-items: center
+               }
+
+               .side-conn {
+                   display: none
+               }
+
+               main, .topbar {
+                   padding-left: 16px;
+                   padding-right: 16px
+               }
+           }
     </style>
 </head>
 <body>
-    <header>
-        <h1>EvoRL<span class="dot">·</span>Mission Control</h1>
-        <span class="sub">Neuroevolution eines GRU-Agenten · Live-Telemetrie</span>
-        <span id="status" class="status-pill"><span class="led"></span><span id="statusText">verbinde…</span></span>
-        <button id="stopBtn" class="btn-stop" hidden>Training stoppen</button>
-    </header>
+    <div class="app">
 
-    <main>
-        <section class="progress-wrap">
-            <div class="progress-head">
-                <div class="gen">Generation <b id="genNow" class="mono">–</b> <span class="pct">/ <span id="genTotal" class="mono">–</span></span></div>
-                <div class="pct"><span id="elapsed" class="mono">0s</span> · Curriculum <span id="curr" class="mono">0%</span></div>
+        <!-- ======================= Seitenleiste ======================= -->
+        <aside class="side">
+            <div class="brand">
+                <span class="glyph" aria-hidden="true"></span>
+                <span>
+                    <span class="name">EvoRL<span class="dot">·</span>MC</span>
+                    <span class="tag">Mission Control</span>
+                </span>
             </div>
-            <div class="bar"><span id="progressBar"></span></div>
-        </section>
 
-        <section class="cards">
-            <div class="card accent"><div class="label">Beste Fitness</div><div class="value mono" id="best">–</div></div>
-            <div class="card"><div class="label">Ø Fitness</div><div class="value mono" id="avg">–</div></div>
-            <div class="card teal"><div class="label">Ø Food / Episode</div><div class="value mono" id="avgFood">–</div></div>
-            <div class="card teal"><div class="label">Bestes Food</div><div class="value mono" id="bestFood">–</div></div>
-            <div class="card"><div class="label">Global Best</div><div class="value mono" id="gBest">–</div></div>
-            <div class="card"><div class="label">Mutation σ</div><div class="value mono" id="mut">–</div></div>
-            <div class="card"><div class="label">Diversität</div><div class="value mono" id="div">–</div></div>
-            <div class="card"><div class="label">Spezies</div><div class="value mono" id="species">–</div></div>
-        </section>
+            <nav class="nav" aria-label="Hauptnavigation">
+                <span class="nav-label">Bereiche</span>
+                <a href="#/home" data-view="home">
+                    <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v9h13v-9" /></svg>
+                    Home
+                </a>
+                <a href="#/training" data-view="training">
+                    <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-8" /><path d="M22 19H2" /></svg>
+                    Training
+                    <span class="hint mono" id="navGenHint"></span>
+                </a>
+                <!-- Neue Bereiche: hier einen Link ergaenzen, unten eine <section class="view"> anlegen
+                     und die View in VIEWS registrieren - mehr ist nicht noetig. -->
+            </nav>
 
-        <section class="config">
-            <div class="config-head">
-                <h2>Parameter · Live-Tuning</h2>
-                <span class="hint">Werte eingeben und übernehmen — wirkt ab der nächsten Generation</span>
+            <div class="side-foot">
+                <span id="status" class="status-pill"><span class="led"></span><span id="statusText">verbinde…</span></span>
+                <span id="conn" class="side-conn"></span>
             </div>
-            <div class="config-grid">
-                <div class="field">
-                    <label for="cfgMutation">Mutation σ</label>
-                    <input id="cfgMutation" type="number" step="0.001" min="0" inputmode="decimal" placeholder="z. B. 0.080">
-                </div>
-                <div class="field">
-                    <label for="cfgFoodReward">Belohnung / Nahrung</label>
-                    <input id="cfgFoodReward" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 60">
-                </div>
-                <div class="field">
-                    <label for="cfgStepCost">Kosten / Schritt</label>
-                    <input id="cfgStepCost" type="number" step="0.01" inputmode="decimal" placeholder="z. B. 0.05">
-                </div>
-                <div class="field">
-                    <label for="cfgRewardWeight">Reward-Gewicht</label>
-                    <input id="cfgRewardWeight" type="number" step="0.05" min="0" inputmode="decimal" placeholder="z. B. 0.30">
-                </div>
-                <div class="field">
-                    <label for="cfgExploreBonus">Erkundungs-Bonus</label>
-                    <input id="cfgExploreBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 150">
-                </div>
-                <div class="field">
-                    <label for="cfgEfficiencyBonus">Effizienz-Bonus</label>
-                    <input id="cfgEfficiencyBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 40">
-                </div>
-            </div>
-            <div class="config-actions">
-                <button id="cfgApply" class="btn-apply" type="button">Übernehmen</button>
-                <button id="cfgReset" class="btn-ghost" type="button">Zurücksetzen</button>
-                <span id="cfgMsg" class="cfg-msg"></span>
-            </div>
-        </section>
+        </aside>
 
-        <section class="arena">
-            <div class="arena-head">
+        <!-- ======================= Inhalt ======================= -->
+        <div class="content">
+            <div class="topbar">
                 <div>
-                    <h2>Bester Agent · Live-Replay</h2>
-                    <p class="arena-explain">So bewegt sich der aktuell beste Agent. Das <b>türkise Quadrat</b> ist der Agent — er steuert sich selbst und versucht, möglichst viel <span class="hi-food">Nahrung</span> (gelbe Punkte) einzusammeln. Die türkise Spur zeigt seinen zuletzt gelaufenen Weg; graue Felder sind Wände. Die Episode läuft in Schleife.</p>
+                    <h1 id="topTitle">Home</h1>
+                    <div class="sub" id="topSub">Modelle laden, vorführen und analysieren</div>
                 </div>
-                <div class="arena-meta mono"><span id="rGen">–</span></div>
+                <span class="spacer"></span>
+                <button id="stopBtn" class="btn danger" hidden>Training stoppen</button>
             </div>
 
-            <canvas id="arenaCanvas"></canvas>
-            <div class="arena-bar"><span id="arenaBar"></span></div>
+            <main>
 
-            <div class="arena-controls">
-                <label class="gen-select">
-                    <span>Ansicht</span>
-                    <select id="rGenSelect"><option value="latest">Neueste (live folgen)</option></select>
-                </label>
-                <button id="rPlay" class="arena-btn" type="button">⏸ Pause</button>
-                <button id="rRestart" class="arena-btn" type="button">⟲ Neu starten</button>
-                <div class="seg" role="group" aria-label="Geschwindigkeit">
-                    <button class="seg-btn" data-speed="0.5" type="button">0,5×</button>
-                    <button class="seg-btn is-active" data-speed="1" type="button">1×</button>
-                    <button class="seg-btn" data-speed="2" type="button">2×</button>
-                </div>
-                <span class="arena-stat mono">Schritt <span id="rStep">0</span><span class="dim">/<span id="rLen">0</span></span></span>
-                <span class="arena-stat mono"><span class="dot-food"></span><span id="rFood">0</span> Nahrung</span>
-            </div>
+                <!-- ============================================================
+                     VIEW: HOME  -  Modell-Bibliothek, Vorfuehrung, Analyse
+                     ============================================================ -->
+                <section id="view-home" class="view" aria-label="Home">
 
-            <div class="arena-legend">
-                <span><i class="sw agent"></i>Agent</span>
-                <span><i class="sw food"></i>Nahrung</span>
-                <span><i class="sw trail"></i>Weg</span>
-                <span><i class="sw wall"></i>Wand / Hindernis</span>
-            </div>
-        </section>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>Modell-Bibliothek</h2>
+                            <span class="hint">Quelle: <span class="mono">GET /api/models</span> · zusätzlich lassen sich Replay-Dateien direkt öffnen</span>
+                        </div>
+                        <div class="model-grid" id="modelGrid"></div>
+                        <div class="config-actions">
+                            <button id="modelsRefresh" class="btn ghost small" type="button">⟳ Liste aktualisieren</button>
+                            <button id="fileOpenBtn" class="btn small" type="button">Replay-Datei öffnen (.json)</button>
+                            <input id="fileOpen" type="file" accept=".json,application/json" hidden>
+                            <span id="modelsMsg" class="cfg-msg"></span>
+                        </div>
+                    </div>
 
-        <section class="charts">
-            <div class="chart">
-                <h2>Fitness-Verlauf</h2>
-                <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Durchschnitt</span></div>
-                <canvas id="fitChart"></canvas>
-            </div>
-            <div class="chart">
-                <h2>Nahrung pro Episode</h2>
-                <div class="legend"><span><i style="background:var(--amber)"></i>Best Food</span><span><i style="background:var(--teal)"></i>Ø Food</span></div>
-                <canvas id="foodChart"></canvas>
-            </div>
-            <div class="chart">
-                <h2>Effizienz · Schritte / Nahrung</h2>
-                <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Ø</span><span style="margin-left:auto;color:var(--muted)">niedriger = besser</span></div>
-                <canvas id="spfChart"></canvas>
-            </div>
-        </section>
-    </main>
+                    <div class="panel" id="demoPanel" hidden>
+                        <div class="panel-head">
+                            <div>
+                                <h2>Vorführung · <span id="demoName" class="mono">–</span></h2>
+                                <p class="arena-explain">Das <b>türkise Quadrat</b> ist der Agent. Er steuert sich selbst und sammelt <span class="hi-food">Nahrung</span> (gelbe Punkte); die Spur zeigt seinen zuletzt gelaufenen Weg, graue Felder sind Wände. Die Episode läuft in Schleife.</p>
+                            </div>
+                            <div class="arena-meta mono"><span id="demoGen">–</span></div>
+                        </div>
 
-    <footer>Pollt <span class="mono">/api/status</span> · aktualisiert jede Sekunde · <span id="conn"></span></footer>
+                        <canvas id="demoCanvas" class="arena-canvas"></canvas>
+                        <div class="arena-bar"><span id="demoBar"></span></div>
+
+                        <div class="arena-controls">
+                            <button id="demoPlay" class="btn small" type="button">⏸ Pause</button>
+                            <button id="demoRestart" class="btn small" type="button">⟲ Neu starten</button>
+                            <div class="seg" id="demoSeg" role="group" aria-label="Geschwindigkeit">
+                                <button class="seg-btn" data-speed="0.5" type="button">0,5×</button>
+                                <button class="seg-btn is-active" data-speed="1" type="button">1×</button>
+                                <button class="seg-btn" data-speed="2" type="button">2×</button>
+                            </div>
+                            <span class="arena-stat mono">Schritt <span id="demoStep">0</span><span class="dim">/<span id="demoLen">0</span></span></span>
+                            <span class="arena-stat mono"><span class="dot-food"></span><span id="demoFood">0</span> Nahrung</span>
+                        </div>
+
+                        <div class="arena-legend">
+                            <span><i class="sw agent"></i>Agent</span>
+                            <span><i class="sw food"></i>Nahrung</span>
+                            <span><i class="sw trail"></i>Weg</span>
+                            <span><i class="sw wall"></i>Wand / Hindernis</span>
+                        </div>
+                    </div>
+
+                    <div class="panel" id="anaPanel" hidden>
+                        <div class="panel-head">
+                            <h2>Analyse · <span id="anaName" class="mono">–</span></h2>
+                            <span class="hint">berechnet aus der Replay-Episode</span>
+                        </div>
+                        <div class="ana-grid">
+                            <div>
+                                <canvas id="anaHeat" class="heat-canvas"></canvas>
+                                <p class="ana-note">Aufenthalts-Heatmap: je heller eine Zelle, desto häufiger stand der Agent dort. Helle Cluster ohne Nahrung deuten auf Schleifen oder „Camping" hin, eine gleichmäßig verteilte Karte auf systematische Erkundung.</p>
+                            </div>
+                            <div class="kv" id="anaStats"></div>
+                        </div>
+                    </div>
+
+                </section>
+
+                <!-- ============================================================
+                     VIEW: TRAINING  -  Live-Telemetrie (bisheriges Dashboard)
+                     ============================================================ -->
+                <section id="view-training" class="view" aria-label="Training">
+
+                    <section class="progress-wrap">
+                        <div class="progress-head">
+                            <div class="gen">Generation <b id="genNow" class="mono">–</b> <span class="pct">/ <span id="genTotal" class="mono">–</span></span></div>
+                            <div class="pct"><span id="elapsed" class="mono">0s</span> · Curriculum <span id="curr" class="mono">0%</span></div>
+                        </div>
+                        <div class="bar"><span id="progressBar"></span></div>
+                    </section>
+
+                    <section class="cards">
+                        <div class="card accent"><div class="label">Beste Fitness</div><div class="value mono" id="best">–</div></div>
+                        <div class="card"><div class="label">Ø Fitness</div><div class="value mono" id="avg">–</div></div>
+                        <div class="card teal"><div class="label">Ø Food / Episode</div><div class="value mono" id="avgFood">–</div></div>
+                        <div class="card teal"><div class="label">Bestes Food</div><div class="value mono" id="bestFood">–</div></div>
+                        <div class="card"><div class="label">Global Best</div><div class="value mono" id="gBest">–</div></div>
+                        <div class="card"><div class="label">Mutation σ</div><div class="value mono" id="mut">–</div></div>
+                        <div class="card"><div class="label">Diversität</div><div class="value mono" id="div">–</div></div>
+                        <div class="card"><div class="label">Spezies</div><div class="value mono" id="species">–</div></div>
+                    </section>
+
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>Parameter · Live-Tuning</h2>
+                            <span class="hint">Werte eingeben und übernehmen — wirkt ab der nächsten Generation</span>
+                        </div>
+                        <div class="config-grid">
+                            <div class="field">
+                                <label for="cfgMutation">Mutation σ</label>
+                                <input id="cfgMutation" type="number" step="0.001" min="0" inputmode="decimal" placeholder="z. B. 0.080">
+                            </div>
+                            <div class="field">
+                                <label for="cfgFoodReward">Belohnung / Nahrung</label>
+                                <input id="cfgFoodReward" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 60">
+                            </div>
+                            <div class="field">
+                                <label for="cfgStepCost">Kosten / Schritt</label>
+                                <input id="cfgStepCost" type="number" step="0.01" inputmode="decimal" placeholder="z. B. 0.05">
+                            </div>
+                            <div class="field">
+                                <label for="cfgRewardWeight">Reward-Gewicht</label>
+                                <input id="cfgRewardWeight" type="number" step="0.05" min="0" inputmode="decimal" placeholder="z. B. 0.30">
+                            </div>
+                            <div class="field">
+                                <label for="cfgExploreBonus">Erkundungs-Bonus</label>
+                                <input id="cfgExploreBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 150">
+                            </div>
+                            <div class="field">
+                                <label for="cfgEfficiencyBonus">Effizienz-Bonus</label>
+                                <input id="cfgEfficiencyBonus" type="number" step="1" min="0" inputmode="decimal" placeholder="z. B. 40">
+                            </div>
+                        </div>
+                        <div class="config-actions">
+                            <button id="cfgApply" class="btn primary" type="button">Übernehmen</button>
+                            <button id="cfgReset" class="btn ghost" type="button">Zurücksetzen</button>
+                            <span id="cfgMsg" class="cfg-msg"></span>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>Bester Agent · Live-Replay</h2>
+                                <p class="arena-explain">So bewegt sich der aktuell beste Agent. Das <b>türkise Quadrat</b> ist der Agent — er versucht, möglichst viel <span class="hi-food">Nahrung</span> (gelbe Punkte) einzusammeln. Die türkise Spur zeigt seinen zuletzt gelaufenen Weg; graue Felder sind Wände. Die Episode läuft in Schleife.</p>
+                            </div>
+                            <div class="arena-meta mono"><span id="rGen">–</span></div>
+                        </div>
+
+                        <canvas id="arenaCanvas" class="arena-canvas"></canvas>
+                        <div class="arena-bar"><span id="arenaBar"></span></div>
+
+                        <div class="arena-controls">
+                            <label class="gen-select">
+                                <span>Ansicht</span>
+                                <select id="rGenSelect"><option value="latest">Neueste (live folgen)</option></select>
+                            </label>
+                            <button id="rPlay" class="btn small" type="button">⏸ Pause</button>
+                            <button id="rRestart" class="btn small" type="button">⟲ Neu starten</button>
+                            <div class="seg" id="rSeg" role="group" aria-label="Geschwindigkeit">
+                                <button class="seg-btn" data-speed="0.5" type="button">0,5×</button>
+                                <button class="seg-btn is-active" data-speed="1" type="button">1×</button>
+                                <button class="seg-btn" data-speed="2" type="button">2×</button>
+                            </div>
+                            <span class="arena-stat mono">Schritt <span id="rStep">0</span><span class="dim">/<span id="rLen">0</span></span></span>
+                            <span class="arena-stat mono"><span class="dot-food"></span><span id="rFood">0</span> Nahrung</span>
+                        </div>
+
+                        <div class="arena-legend">
+                            <span><i class="sw agent"></i>Agent</span>
+                            <span><i class="sw food"></i>Nahrung</span>
+                            <span><i class="sw trail"></i>Weg</span>
+                            <span><i class="sw wall"></i>Wand / Hindernis</span>
+                        </div>
+                    </div>
+
+                    <section class="charts">
+                        <div class="chart">
+                            <h2>Fitness-Verlauf</h2>
+                            <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Durchschnitt</span></div>
+                            <canvas id="fitChart"></canvas>
+                        </div>
+                        <div class="chart">
+                            <h2>Nahrung pro Episode</h2>
+                            <div class="legend"><span><i style="background:var(--amber)"></i>Best Food</span><span><i style="background:var(--teal)"></i>Ø Food</span></div>
+                            <canvas id="foodChart"></canvas>
+                        </div>
+                        <div class="chart">
+                            <h2>Effizienz · Schritte / Nahrung</h2>
+                            <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Ø</span><span style="margin-left:auto;color:var(--muted)">niedriger = besser</span></div>
+                            <canvas id="spfChart"></canvas>
+                        </div>
+                    </section>
+
+                </section>
+
+            </main>
+
+            <footer>Pollt <span class="mono">/api/status</span> jede Sekunde · Navigation per <span class="mono">#/home</span> · <span class="mono">#/training</span></footer>
+        </div>
+    </div>
 
     <script>
+        /* ============================================================
+        EvoRL Mission Control - Frontend
+        Aufbau (bewusst erweiterbar gehalten):
+        1) API        - alle Backend-Endpunkte an EINER Stelle
+        2) Router     - Hash-Navigation + View-Registry (VIEWS)
+        3) ArenaPlayer- wiederverwendbarer Replay-Renderer
+        4) Training   - Telemetrie, Charts, Live-Tuning, Stop
+        5) Home       - Modell-Bibliothek, Vorfuehrung, Analyse
+        Neue Funktionalitaet: View in HTML anlegen, in VIEWS
+        registrieren, Endpunkt in API ergaenzen - fertig.
+        ============================================================ */
+
         const $ = id => document.getElementById(id);
         const fmt = (n,d=1) => (n==null||isNaN(n)) ? "–" : Number(n).toLocaleString("de-DE",{maximumFractionDigits:d});
         const fmtTime = s => { s=Math.floor(s); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
@@ -844,11 +1342,186 @@
         const getCss = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
         function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
         ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+        function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
-        // ---- Schlanker Canvas-Linienchart (kein externes Framework) ----
+        /* ---------- 1) API: alle Endpunkte zentral ---------- */
+        const API = {
+        status:  "/api/status",            // GET  - Telemetrie (vorhanden)
+        replay:  "/api/replay",            // GET  - Replay des besten Agenten (vorhanden)
+        stop:    "/api/stop",              // POST - Training abbrechen (vorhanden)
+        config:  "/api/config",            // POST - Live-Tuning (vorhanden)
+        models:  "/api/models",            // GET  - [{id,name,generation,fitness,food,steps,savedAt,replayUrl?}]  (optional, fuer Home)
+        modelReplay: id => "/api/models/"+encodeURIComponent(id)+"/replay",   // GET (optional, fuer Home)
+        modelLoad:   id => "/api/models/"+encodeURIComponent(id)+"/load",     // POST (optional: Modell ins Training uebernehmen)
+        };
+
+        /* ---------- 2) Router: Hash-Navigation + View-Registry ---------- */
+        const VIEWS = {
+        home:     { title:"Home",     sub:"Modelle laden, vorführen und analysieren",        onShow(){ Home.refreshModels(false); } },
+        training: { title:"Training", sub:"Neuroevolution eines GRU-Agenten · Live-Telemetrie", onShow(){ if(lastData) renderStatus(lastData); } },
+        };
+        let currentView=null;
+
+        function navigate(name){
+        if(!VIEWS[name]) name="home";
+        currentView=name;
+        document.querySelectorAll(".view").forEach(v=>v.classList.toggle("is-active", v.id==="view-"+name));
+        document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("is-active", a.dataset.view===name));
+        $("topTitle").textContent=VIEWS[name].title;
+        $("topSub").textContent=VIEWS[name].sub;
+        if(VIEWS[name].onShow) VIEWS[name].onShow();
+        }
+        function routeFromHash(){
+        const m=(location.hash||"").match(/^#\/([\w-]+)/);
+        navigate(m ? m[1] : "home");
+        }
+        window.addEventListener("hashchange",routeFromHash);
+
+        /* ---------- 3) ArenaPlayer: wiederverwendbarer Replay-Renderer ----------
+        Erwartet das Replay-JSON aus Evolution::recordReplay():
+        { generation,w,h,food,steps, walls[], food0[], frames[[x,y],..], events[[frame,typ,idx],..] }
+        Mehrfach instanziierbar (Training-Replay, Home-Demo, ...).            */
+        const R_STEP_MS=60;            // Basis-Tempo bei 1x (~16 Schritte/s)
+        const TRAIL_LEN=22;            // Laenge der verblassenden Spur
+
+        function createArenaPlayer(els){
+        const P={replay:null, frame:0, evt:0, eaten:0, foods:null,
+        paused:false, speed:1, last:0, _css:0};
+
+        function reset(){
+        P.frame=0; P.evt=0; P.eaten=0;
+        P.foods=new Set(P.replay ? P.replay.food0 : []);
+        }
+        function setReplay(rep){ P.replay=rep; reset(); }
+        function advance(){
+        P.frame++;
+        if(P.frame>=P.replay.frames.length){ reset(); return; }   // Schleife
+        const ev=P.replay.events;
+        while(P.evt<ev.length && ev[P.evt][0]===P.frame){
+        const e=ev[P.evt++];
+        if(e[1]===1) P.foods.add(e[2]);
+        else { P.foods.delete(e[2]); P.eaten++; }               // Entfernen = gefressen
+        }
+        }
+        // Canvas nur bei tatsaechlicher Groessenaenderung neu dimensionieren.
+        function ctx2d(cv){
+        const dpr=window.devicePixelRatio||1;
+        const w=cv.clientWidth||460, h=cv.clientHeight||w;
+        const key=w+"x"+h;
+        if(key!==P._css){ P._css=key; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+        const ctx=cv.getContext("2d");
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        return {ctx,w,h};
+        }
+        function draw(ts){
+        const cv=els.canvas; if(!cv) return;
+        const {ctx,w,h}=ctx2d(cv);
+        ctx.clearRect(0,0,w,h);
+        if(!P.replay){
+        ctx.fillStyle="#6b7d90"; ctx.font='13px ui-monospace,monospace'; ctx.textAlign="center";
+        ctx.fillText("warte auf den ersten Agenten…", w/2, h/2);
+        ctx.textAlign="start"; return;
+        }
+        const t=ts||0, rep=P.replay;
+        const W=rep.w, Hc=rep.h||W;
+        const cs=Math.min(w/W, h/Hc);
+        const ox=(w-W*cs)/2, oy=(h-Hc*cs)/2;
+        const px=x=>ox+x*cs, py=y=>oy+y*cs;
+        const teal=getCss("--teal"), amber=getCss("--amber");
+
+        // dezentes Raster
+        ctx.strokeStyle="rgba(255,255,255,.035)"; ctx.lineWidth=1; ctx.beginPath();
+        for(let i=0;i<=W;i++){ ctx.moveTo(px(i),py(0)); ctx.lineTo(px(i),py(Hc)); }
+        for(let j=0;j<=Hc;j++){ ctx.moveTo(px(0),py(j)); ctx.lineTo(px(W),py(j)); }
+        ctx.stroke();
+
+        // Waende
+        for(const idx of rep.walls){
+        const x=idx%W, y=(idx/W)|0;
+        ctx.fillStyle="#23303d";
+        roundRect(ctx, px(x)+0.5, py(y)+0.5, cs-1, cs-1, Math.max(2,cs*0.18)); ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,.045)";
+        roundRect(ctx, px(x)+0.5, py(y)+0.5, cs-1, Math.max(1.5,cs*0.3), Math.max(2,cs*0.18)); ctx.fill();
+        }
+
+        // Nahrung: weicher Glow + sanfter Puls
+        const pulse=0.5+0.5*Math.sin(t/420);
+        ctx.save();
+        ctx.shadowColor=amber; ctx.shadowBlur=cs*0.55; ctx.fillStyle=amber;
+        for(const idx of P.foods){
+        const x=idx%W, y=(idx/W)|0;
+        ctx.beginPath(); ctx.arc(px(x+0.5),py(y+0.5),cs*(0.24+0.05*pulse),0,Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+
+        // verblassende Spur
+        const from=Math.max(1,P.frame-TRAIL_LEN);
+        for(let k=from;k<=P.frame;k++){
+        const f=rep.frames[k]; if(!f) continue;
+        const a=(k-(P.frame-TRAIL_LEN))/TRAIL_LEN;
+        ctx.fillStyle="rgba(45,212,191,"+(0.04+0.20*a).toFixed(3)+")";
+        ctx.beginPath(); ctx.arc(px(f[0]+0.5),py(f[1]+0.5),cs*(0.09+0.07*a),0,Math.PI*2); ctx.fill();
+        }
+
+        // Agent + Blickrichtung
+        const f=rep.frames[P.frame];
+        if(f){
+        ctx.save();
+        ctx.shadowColor=teal; ctx.shadowBlur=cs*0.7; ctx.fillStyle=teal;
+        const p=cs*0.16;
+        roundRect(ctx, px(f[0])+p, py(f[1])+p, cs-2*p, cs-2*p, Math.max(2,cs*0.26)); ctx.fill();
+        ctx.restore();
+        const prev=rep.frames[P.frame-1];
+        if(prev){
+        const dx=Math.sign(f[0]-prev[0]), dy=Math.sign(f[1]-prev[1]);
+        if(dx||dy){
+        ctx.fillStyle="#06231f";
+        ctx.beginPath();
+        ctx.arc(px(f[0]+0.5)+dx*cs*0.18, py(f[1]+0.5)+dy*cs*0.18, Math.max(1.5,cs*0.08),0,Math.PI*2);
+        ctx.fill();
+        }
+        }
+        }
+
+        // HUD
+        if(els.gen)  els.gen.textContent="Gen "+rep.generation;
+        if(els.step) els.step.textContent=P.frame;
+        if(els.len)  els.len.textContent=rep.frames.length-1;
+        if(els.food) els.food.textContent=P.eaten;
+        if(els.bar){ const tot=rep.frames.length-1; els.bar.style.width=(tot? 100*P.frame/tot : 0)+"%"; }
+        }
+        function loop(ts){
+        if(P.replay){
+        if(!P.paused && ts-P.last >= R_STEP_MS/P.speed){ P.last=ts; advance(); }
+        draw(ts);
+        } else draw(ts);
+        requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+
+        // Steuerung
+        if(els.play) els.play.addEventListener("click", ()=>{
+        P.paused=!P.paused;
+        els.play.textContent = P.paused ? "▶ Weiter" : "⏸ Pause";
+        });
+        if(els.restart) els.restart.addEventListener("click", ()=>{ if(P.replay) reset(); });
+        if(els.seg) els.seg.querySelectorAll(".seg-btn").forEach(b=>{
+        b.addEventListener("click", ()=>{
+        P.speed=parseFloat(b.dataset.speed);
+        els.seg.querySelectorAll(".seg-btn").forEach(x=>x.classList.toggle("is-active", x===b));
+        });
+        });
+
+        return { setReplay, reset, get replay(){return P.replay;} };
+        }
+
+        /* ---------- 4) TRAINING: Telemetrie, Charts, Tuning, Stop ---------- */
+
+        // schlanker Canvas-Linienchart (kein externes Framework)
         function drawChart(canvas, series){
         const dpr = window.devicePixelRatio || 1;
         const w = canvas.clientWidth, h = canvas.clientHeight;
+        if(!w) return;                                  // View gerade nicht sichtbar
         canvas.width = w*dpr; canvas.height = h*dpr;
         const ctx = canvas.getContext("2d"); ctx.scale(dpr,dpr);
         ctx.clearRect(0,0,w,h);
@@ -863,7 +1536,6 @@
         if(min===max){ max=min+1; min-=1; }
         const pad=(max-min)*0.08; min-=pad; max+=pad;
 
-        // Raster + Y-Achsen-Beschriftung
         ctx.strokeStyle="#1f2b38"; ctx.fillStyle="#6b7d90";
         ctx.font="11px ui-monospace,monospace"; ctx.lineWidth=1;
         for(let g=0;g<=4;g++){
@@ -879,7 +1551,6 @@
         ctx.beginPath(); ctx.strokeStyle=s.color; ctx.lineWidth=1.8;
         s.data.forEach((v,i)=>{ const x=X(i),y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
         ctx.stroke();
-        // letzter Punkt markiert
         const li=s.data.length-1;
         ctx.fillStyle=s.color; ctx.beginPath();
         ctx.arc(X(li),Y(s.data[li]),2.6,0,7); ctx.fill();
@@ -887,24 +1558,24 @@
         }
 
         let lastData=null;
-        function render(d){
+        function renderStatus(d){
         lastData=d;
-        // Status
+
+        // Globale Statusanzeige (Seitenleiste)
         const pill=$("status"), txt=$("statusText");
         pill.className="status-pill"+(d.finished?" done":(d.running?" live":""));
         txt.textContent = d.finished ? "abgeschlossen" : (d.running ? "läuft" : "wartet");
+        $("navGenHint").textContent = d.running && d.generation ? "Gen "+d.generation : "";
 
-        // Stop-Button: nur sichtbar, solange ein Lauf aktiv ist.
+        // Stop-Button (Topbar): nur sichtbar, solange ein Lauf aktiv ist.
         const stopBtn=$("stopBtn");
         if(d.running && !d.finished){
         stopBtn.hidden=false;
         stopBtn.disabled = !!d.stopRequested;
         stopBtn.textContent = d.stopRequested ? "Wird gestoppt…" : "Training stoppen";
-        } else {
-        stopBtn.hidden=true;
-        }
+        } else stopBtn.hidden=true;
 
-        // Parameter-Felder einmalig aus dem Backend vorbefuellen (sofern es 'config' liefert).
+        // Parameter-Felder einmalig aus dem Backend vorbefuellen (sofern 'config' geliefert wird).
         if(d.config){ lastCfg=d.config; if(!cfgHydrated){ fillConfig(d.config); cfgHydrated=true; } }
 
         $("genNow").textContent=fmt(d.generation,0);
@@ -923,6 +1594,7 @@
         $("div").textContent=fmt(d.diversity,3);
         $("species").textContent=fmt(d.species,0);
 
+        if(currentView==="training"){
         const H=d.history||{};
         drawChart($("fitChart"),[
         {data:H.best||[],color:getCss('--amber')},
@@ -937,47 +1609,43 @@
         {data:H.avgSpf||[], color:getCss('--teal')},
         ]);
         }
+        }
 
-        // ---- Live-Replay des besten Agenten ----
-        let replay=null, rFrame=0, rEvtPtr=0, rEaten=0, rFoodSet=null;
-        let rPaused=false, rSpeed=1, rLastStep=0, _arenaCss=0;
-        const R_STEP_MS=60;            // Basis-Tempo bei 1x (~16 Schritte/s)
-        const TRAIL_LEN=22;            // Laenge der verblassenden Spur
+        // Replay-Player des Trainings
+        const trainPlayer = createArenaPlayer({
+        canvas:$("arenaCanvas"), bar:$("arenaBar"),
+        play:$("rPlay"), restart:$("rRestart"), seg:$("rSeg"),
+        gen:$("rGen"), step:$("rStep"), len:$("rLen"), food:$("rFood"),
+        });
 
         // Empfangene Replays werden gesammelt; die Anzeige bleibt auf der gewaehlten
-        // Generation stehen und wechselt NICHT automatisch mit. "Neueste folgen" ist
-        // optional ueber die Auswahl aktivierbar.
+        // Generation stehen und wechselt nur im "Neueste folgen"-Modus automatisch.
         const replayCache=new Map();   // generation -> Replay-Objekt
-        let selectedGen=null;          // aktuell angezeigte Generation
-        let followLatest=false;        // true = immer die neueste anzeigen
+        let selectedGen=null;
+        let followLatest=false;
 
         function maxGen(){ let m=null; for(const g of replayCache.keys()) if(m==null||g>m) m=g; return m; }
 
-        // Holt das aktuell vom Backend bereitgestellte Replay und legt es im Cache ab,
-        // ohne die laufende Anzeige zu stoeren (ausser im "Neueste folgen"-Modus).
         async function pollReplay(){
         try{
-        const r=await fetch("/api/replay",{cache:"no-store"});
+        const r=await fetch(API.replay,{cache:"no-store"});
         const rep=await r.json();
         if(!rep.frames || !rep.frames.length || rep.generation==null) return;
         const g=rep.generation;
         const isNew=!replayCache.has(g);
         replayCache.set(g, rep);
         if(isNew) rebuildGenSelect();
-        if(selectedGen==null) setActiveReplay(g);            // erste Generation einrasten
+        if(selectedGen==null) setActiveReplay(g);
         else if(followLatest){ const n=maxGen(); if(n!==selectedGen) setActiveReplay(n); }
         }catch(e){ /* Replay noch nicht verfuegbar */ }
         }
-
         function setActiveReplay(g){
         if(!replayCache.has(g)) return;
-        if(g===selectedGen && replay) return;                  // schon aktiv -> nicht neu starten
+        if(g===selectedGen && trainPlayer.replay) return;
         selectedGen=g;
-        replay=replayCache.get(g);
-        resetReplay();
+        trainPlayer.setReplay(replayCache.get(g));
         const sel=$("rGenSelect"); if(sel) sel.value = followLatest ? "latest" : String(g);
         }
-
         function rebuildGenSelect(){
         const sel=$("rGenSelect"); if(!sel) return;
         const gens=[...replayCache.keys()].sort((a,b)=>a-b);
@@ -986,163 +1654,33 @@
         gens.map(g=>'<option value="'+g+'">Generation '+g+'</option>').join("");
         sel.value = followLatest ? "latest" : (selectedGen!=null ? String(selectedGen) : "latest");
         }
-
-        function resetReplay(){
-        rFrame=0; rEvtPtr=0; rEaten=0;
-        rFoodSet=new Set(replay ? replay.food0 : []);
-        }
-        function advanceReplay(){
-        rFrame++;
-        if(rFrame>=replay.frames.length){ resetReplay(); return; }   // Schleife
-        while(rEvtPtr<replay.events.length && replay.events[rEvtPtr][0]===rFrame){
-        const e=replay.events[rEvtPtr++];
-        if(e[1]===1) rFoodSet.add(e[2]);
-        else { rFoodSet.delete(e[2]); rEaten++; }                  // Entfernen = gefressen
-        }
-        }
-
-        // Canvas nur bei tatsaechlicher Groessenaenderung neu dimensionieren (sonst nur clearen).
-        function arenaCtx(cv){
-        const dpr=window.devicePixelRatio||1;
-        const w=cv.clientWidth||460, h=cv.clientHeight||w;
-        const key=w+"x"+h;
-        if(key!==_arenaCss){ _arenaCss=key; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
-        const ctx=cv.getContext("2d");
-        ctx.setTransform(dpr,0,0,dpr,0,0);
-        return {ctx,w,h};
-        }
-
-        function drawArena(ts){
-        const cv=$("arenaCanvas"); if(!cv) return;
-        const {ctx,w,h}=arenaCtx(cv);
-        ctx.clearRect(0,0,w,h);
-
-        if(!replay){
-        ctx.fillStyle="#6b7d90"; ctx.font='13px ui-monospace,monospace'; ctx.textAlign="center";
-        ctx.fillText("warte auf den ersten Agenten…", w/2, h/2);
-        ctx.textAlign="start"; return;
-        }
-
-        const t=ts||0;
-        const W=replay.w, Hc=replay.h||W;
-        const cs=Math.min(w/W, h/Hc);
-        const ox=(w-W*cs)/2, oy=(h-Hc*cs)/2;       // zentriert (auch bei nicht-quadratisch)
-        const px=(x)=>ox+x*cs, py=(y)=>oy+y*cs;
-        const teal=getCss("--teal"), amber=getCss("--amber");
-
-        // dezentes Raster
-        ctx.strokeStyle="rgba(255,255,255,.035)"; ctx.lineWidth=1; ctx.beginPath();
-        for(let i=0;i<=W;i++){ ctx.moveTo(px(i),py(0)); ctx.lineTo(px(i),py(Hc)); }
-        for(let j=0;j<=Hc;j++){ ctx.moveTo(px(0),py(j)); ctx.lineTo(px(W),py(j)); }
-        ctx.stroke();
-
-        // Waende (abgerundet, mit feiner Lichtkante fuer Tiefe)
-        for(const idx of replay.walls){
-        const x=idx%W, y=(idx/W)|0;
-        ctx.fillStyle="#23303d";
-        roundRect(ctx, px(x)+0.5, py(y)+0.5, cs-1, cs-1, Math.max(2,cs*0.18)); ctx.fill();
-        ctx.fillStyle="rgba(255,255,255,.045)";
-        roundRect(ctx, px(x)+0.5, py(y)+0.5, cs-1, Math.max(1.5,cs*0.3), Math.max(2,cs*0.18)); ctx.fill();
-        }
-
-        // Nahrung: weicher Glow + sanfter Puls
-        const pulse=0.5+0.5*Math.sin(t/420);
-        ctx.save();
-        ctx.shadowColor=amber; ctx.shadowBlur=cs*0.55; ctx.fillStyle=amber;
-        for(const idx of rFoodSet){
-        const x=idx%W, y=(idx/W)|0;
-        ctx.beginPath(); ctx.arc(px(x+0.5),py(y+0.5),cs*(0.24+0.05*pulse),0,Math.PI*2); ctx.fill();
-        }
-        ctx.restore();
-
-        // Weg / verblassende Spur
-        const from=Math.max(1,rFrame-TRAIL_LEN);
-        for(let k=from;k<=rFrame;k++){
-        const f=replay.frames[k]; if(!f) continue;
-        const a=(k-(rFrame-TRAIL_LEN))/TRAIL_LEN;       // 0..1, juenger = staerker
-        ctx.fillStyle="rgba(45,212,191,"+(0.04+0.20*a).toFixed(3)+")";
-        ctx.beginPath(); ctx.arc(px(f[0]+0.5),py(f[1]+0.5),cs*(0.09+0.07*a),0,Math.PI*2); ctx.fill();
-        }
-
-        // Agent (Glow) + Blickrichtung
-        const f=replay.frames[rFrame];
-        if(f){
-        ctx.save();
-        ctx.shadowColor=teal; ctx.shadowBlur=cs*0.7; ctx.fillStyle=teal;
-        const p=cs*0.16;
-        roundRect(ctx, px(f[0])+p, py(f[1])+p, cs-2*p, cs-2*p, Math.max(2,cs*0.26)); ctx.fill();
-        ctx.restore();
-        const prev=replay.frames[rFrame-1];
-        if(prev){
-        const dx=Math.sign(f[0]-prev[0]), dy=Math.sign(f[1]-prev[1]);
-        if(dx||dy){
-        ctx.fillStyle="#06231f";
-        ctx.beginPath();
-        ctx.arc(px(f[0]+0.5)+dx*cs*0.18, py(f[1]+0.5)+dy*cs*0.18, Math.max(1.5,cs*0.08),0,Math.PI*2);
-        ctx.fill();
-        }
-        }
-        }
-
-        // HUD
-        $("rGen").textContent="Gen "+replay.generation;
-        $("rStep").textContent=rFrame;
-        $("rLen").textContent=replay.frames.length-1;
-        $("rFood").textContent=rEaten;
-        const bar=$("arenaBar"), tot=replay.frames.length-1;
-        if(bar) bar.style.width=(tot? 100*rFrame/tot : 0)+"%";
-        }
-
-        // Eine durchgehende Animationsschleife: weicher Glow/Puls + tempo-/pausierbares Schalten der Schritte.
-        function arenaLoop(ts){
-        if(replay){
-        if(!rPaused && ts-rLastStep >= R_STEP_MS/rSpeed){ rLastStep=ts; advanceReplay(); }
-        drawArena(ts);
-        }
-        requestAnimationFrame(arenaLoop);
-        }
-
-        // ---- Steuerung der Arena ----
-        $("rPlay").addEventListener("click", ()=>{
-        rPaused=!rPaused;
-        $("rPlay").textContent = rPaused ? "▶ Weiter" : "⏸ Pause";
-        });
-        $("rRestart").addEventListener("click", ()=>{ if(replay) resetReplay(); });
-        document.querySelectorAll(".seg-btn").forEach(b=>{
-        b.addEventListener("click", ()=>{
-        rSpeed=parseFloat(b.dataset.speed);
-        document.querySelectorAll(".seg-btn").forEach(x=>x.classList.toggle("is-active", x===b));
-        });
-        });
-        // Generationsauswahl: manuell waehlen, ansonsten bleibt die Anzeige stehen.
-        $("rGenSelect").addEventListener("change", (e)=>{
+        $("rGenSelect").addEventListener("change", e=>{
         const v=e.target.value;
         if(v==="latest"){ followLatest=true; const n=maxGen(); if(n!=null) setActiveReplay(n); }
         else { followLatest=false; setActiveReplay(parseInt(v,10)); }
         });
 
+        // Status-Poll (laeuft global, unabhaengig von der aktiven View)
         async function poll(){
         try{
-        const r=await fetch("/api/status",{cache:"no-store"});
+        const r=await fetch(API.status,{cache:"no-store"});
         const d=await r.json();
         $("conn").textContent="";
-        render(d);
-        pollReplay();              // Replays sammeln; Anzeige wechselt nur auf Wunsch
+        renderStatus(d);
+        pollReplay();
         }catch(e){
-        $("conn").innerHTML='<span class="err">keine Verbindung zum Trainings-Backend</span>';
+        $("conn").innerHTML='<span class="err">keine Verbindung zum Backend</span>';
         }
         }
 
-        // Stop-Button: sendet den Abbruchwunsch an das Backend.
-        // Der tatsaechliche Zustand kommt anschliessend ueber /api/status zurueck.
+        // Stop-Button
         $("stopBtn").addEventListener("click", async ()=>{
         const b=$("stopBtn"); b.disabled=true; b.textContent="Wird gestoppt…";
-        try{ await fetch("/api/stop",{method:"POST"}); }
+        try{ await fetch(API.stop,{method:"POST"}); }
         catch(e){ /* Backend meldet den Stop ueber /api/status zurueck */ }
         });
 
-        // ---- Parameter-Panel (Live-Tuning) ----
-        // Mapping JSON-Schluessel -> Feld-ID. Diese Schluessel gehen an POST /api/config.
+        // Parameter-Panel (Live-Tuning). JSON-Schluessel -> Feld-ID; geht an POST /api/config.
         const CFG_FIELDS = {
         mutation:        "cfgMutation",
         foodReward:      "cfgFoodReward",
@@ -1174,13 +1712,12 @@
         clearTimeout(cfgMessage._t);
         if(text) cfgMessage._t=setTimeout(()=>{ m.textContent=""; m.className="cfg-msg"; },4000);
         }
-
         $("cfgApply").addEventListener("click", async ()=>{
         const body=readConfig();
         if(!Object.keys(body).length){ cfgMessage("Keine Werte eingegeben.","err"); return; }
         const btn=$("cfgApply"); btn.disabled=true;
         try{
-        const r=await fetch("/api/config",{method:"POST",
+        const r=await fetch(API.config,{method:"POST",
         headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
         if(!r.ok) throw new Error("HTTP "+r.status);
         cfgMessage("Parameter übernommen — wirkt ab der nächsten Generation.","ok");
@@ -1188,15 +1725,249 @@
         cfgMessage("Konnte Parameter nicht senden (Backend /api/config?).","err");
         }finally{ btn.disabled=false; }
         });
-
         $("cfgReset").addEventListener("click", ()=>{
         if(lastCfg){ fillConfig(lastCfg); cfgMessage("Auf Backend-Werte zurückgesetzt.",""); }
         else cfgMessage("Keine Backend-Werte verfügbar.","err");
         });
 
-        window.addEventListener("resize",()=>{ if(lastData) render(lastData); });
+        /* ---------- 5) HOME: Modell-Bibliothek, Vorfuehrung, Analyse ---------- */
+        const Home = (()=>{
+        const demoPlayer = createArenaPlayer({
+        canvas:$("demoCanvas"), bar:$("demoBar"),
+        play:$("demoPlay"), restart:$("demoRestart"), seg:$("demoSeg"),
+        gen:$("demoGen"), step:$("demoStep"), len:$("demoLen"), food:$("demoFood"),
+        });
+
+        let models=[];            // zuletzt geladene Modellliste
+        let activeKey=null;       // markierte Karte
+
+        function msg(text,kind){
+        const m=$("modelsMsg"); m.textContent=text||""; m.className="cfg-msg"+(kind?(" "+kind):"");
+        clearTimeout(msg._t);
+        if(text) msg._t=setTimeout(()=>{ m.textContent=""; m.className="cfg-msg"; },5000);
+        }
+
+        // ---- Modellliste vom Backend holen (optionaler Endpunkt) ----
+        async function refreshModels(announce){
+        let list=null;
+        try{
+        const r=await fetch(API.models,{cache:"no-store"});
+        if(r.ok){
+        const data=await r.json();
+        list=Array.isArray(data) ? data : (data.models||[]);
+        }
+        }catch(e){ /* Endpunkt (noch) nicht vorhanden -> leerer Zustand */ }
+        if(list){ models=models.filter(m=>m.local).concat(list.map(normalizeModel)); }
+        renderModels();
+        if(announce) msg(list ? "Liste aktualisiert." : "Backend liefert /api/models (noch) nicht — lokale Dateien funktionieren trotzdem.", list?"ok":"");
+        }
+
+        function normalizeModel(m){
+        return {
+        id: m.id != null ? m.id : (m.name||"modell"),
+        name: m.name || ("Modell "+(m.id!=null?m.id:"?")),
+        generation: m.generation, fitness: m.fitness, food: m.food, steps: m.steps,
+        savedAt: m.savedAt || m.date || null,
+        replayUrl: m.replayUrl || null,
+        local:false, replay:null,
+        };
+        }
+
+        function renderModels(){
+        const grid=$("modelGrid");
+        if(!models.length){
+        grid.innerHTML =
+        '<div class="empty" style="grid-column:1/-1">' +
+        '<h3>Noch keine Modelle in der Bibliothek</h3>' +
+        '<p>Sobald das Backend unter <code>GET /api/models</code> gespeicherte Modelle auflistet, erscheinen sie hier. ' +
+        'Bis dahin kannst du jede vom Training erzeugte Replay-Datei (das JSON aus <code>recordReplay</code>) direkt öffnen und vorführen oder analysieren.</p>' +
+        '<button class="btn small" type="button" onclick="document.getElementById(\'fileOpen\').click()">Replay-Datei öffnen</button>' +
+        '</div>';
+        return;
+        }
+        grid.innerHTML = models.map((m,i)=>{
+        const key=String(i);
+        return '<article class="model-card'+(key===activeKey?" is-active":"")+'" data-key="'+key+'">' +
+        '<div class="mc-top"><div>' +
+        '<div class="mc-name">'+esc(m.name)+'</div>' +
+        '<div class="mc-when mono">'+(m.savedAt?esc(m.savedAt):(m.generation!=null?("Generation "+esc(m.generation)):""))+'</div>' +
+        '</div>' +
+        '<span class="mc-badge'+(m.local?" local":"")+'">'+(m.local?"lokal":"Server")+'</span></div>' +
+        '<div class="mc-stats">' +
+        '<div class="mc-stat food"><div class="v mono">'+fmt(m.food,0)+'</div><div class="k">Food</div></div>' +
+        '<div class="mc-stat"><div class="v mono">'+fmt(m.fitness,0)+'</div><div class="k">Fitness</div></div>' +
+        '<div class="mc-stat"><div class="v mono">'+fmt(m.steps,0)+'</div><div class="k">Schritte</div></div>' +
+        '</div>' +
+        '<div class="mc-actions">' +
+        '<button class="btn small" data-act="demo" type="button">▶ Vorführen</button>' +
+        '<button class="btn small" data-act="analyze" type="button">Analysieren</button>' +
+        (m.local? "" : '<button class="btn small ghost" data-act="load" type="button">In Training laden</button>') +
+        '</div>' +
+        '</article>';
+        }).join("");
+        }
+
+        // Klicks der Modellkarten (Event-Delegation: funktioniert auch nach Re-Render)
+        $("modelGrid").addEventListener("click", async e=>{
+        const btn=e.target.closest("button[data-act]"); if(!btn) return;
+        const card=e.target.closest(".model-card"); if(!card) return;
+        const m=models[parseInt(card.dataset.key,10)]; if(!m) return;
+        activeKey=card.dataset.key;
+        renderModels();
+        const act=btn.dataset.act;
+        if(act==="demo")    showDemo(m);
+        if(act==="analyze") showAnalysis(m);
+        if(act==="load")    loadIntoTraining(m);
+        });
+
+        // ---- Replay eines Modells beschaffen (Server oder lokal) ----
+        async function getReplay(m){
+        if(m.replay) return m.replay;
+        const url = m.replayUrl || API.modelReplay(m.id);
+        const r=await fetch(url,{cache:"no-store"});
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        const rep=await r.json();
+        if(!rep.frames || !rep.frames.length) throw new Error("Replay leer");
+        m.replay=rep;
+        return rep;
+        }
+
+        async function showDemo(m){
+        try{
+        const rep=await getReplay(m);
+        $("demoPanel").hidden=false;
+        $("demoName").textContent=m.name;
+        demoPlayer.setReplay(rep);
+        $("demoPanel").scrollIntoView({behavior:"smooth",block:"start"});
+        }catch(e){
+        msg("Kein Replay für „"+m.name+"“ verfügbar ("+e.message+"). Erwartet: "+(m.replayUrl||API.modelReplay(m.id)),"err");
+        }
+        }
+
+        async function loadIntoTraining(m){
+        try{
+        const r=await fetch(API.modelLoad(m.id),{method:"POST"});
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        msg("„"+m.name+"“ wird ins Training übernommen.","ok");
+        }catch(e){
+        msg("Backend bietet POST "+API.modelLoad(m.id)+" (noch) nicht an.","err");
+        }
+        }
+
+        // ---- Analyse: komplett clientseitig aus dem Replay berechnet ----
+        function analyze(rep){
+        const W=rep.w, Hc=rep.h||W;
+        const counts=new Float32Array(W*Hc);
+        let pathLen=0;
+        for(let k=0;k<rep.frames.length;k++){
+        const f=rep.frames[k];
+        counts[f[1]*W+f[0]]++;
+        if(k>0){ const p=rep.frames[k-1]; if(p[0]!==f[0]||p[1]!==f[1]) pathLen++; }
+        }
+        let uniq=0,maxC=0;
+        for(let i=0;i<counts.length;i++){ if(counts[i]>0)uniq++; if(counts[i]>maxC)maxC=counts[i]; }
+        const free=W*Hc - rep.walls.length;
+        const steps=rep.steps!=null?rep.steps:(rep.frames.length-1);
+        const food=rep.food!=null?rep.food:0;
+        return {
+        counts,W,H:Hc,maxC,
+        steps, food,
+        spf: food>0 ? steps/food : null,
+        coverage: free>0 ? uniq/free : 0,
+        revisitRate: rep.frames.length>0 ? 1-(uniq/rep.frames.length) : 0,
+        idleRate: rep.frames.length>1 ? 1-(pathLen/(rep.frames.length-1)) : 0,
+        };
+        }
+
+        function drawHeatmap(a){
+        const cv=$("anaHeat");
+        const dpr=window.devicePixelRatio||1;
+        const w=cv.clientWidth||460, h=cv.clientHeight||w;
+        cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+        const ctx=cv.getContext("2d");
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.clearRect(0,0,w,h);
+        const cs=Math.min(w/a.W,h/a.H);
+        const ox=(w-a.W*cs)/2, oy=(h-a.H*cs)/2;
+        for(let y=0;y<a.H;y++)for(let x=0;x<a.W;x++){
+        const c=a.counts[y*a.W+x];
+        if(!c) continue;
+        const v=Math.sqrt(c/a.maxC);                 // Wurzel = bessere Spreizung
+        ctx.fillStyle="rgba(45,212,191,"+(0.10+0.85*v).toFixed(3)+")";
+        ctx.fillRect(ox+x*cs+0.5, oy+y*cs+0.5, cs-1, cs-1);
+        }
+        }
+
+        async function showAnalysis(m){
+        try{
+        const rep=await getReplay(m);
+        const a=analyze(rep);
+        $("anaPanel").hidden=false;
+        $("anaName").textContent=m.name;
+        const items=[
+        {k:"Nahrung", v:fmt(a.food,0), cls:"food"},
+        {k:"Schritte", v:fmt(a.steps,0), cls:""},
+        {k:"Schritte / Nahrung", v:a.spf!=null?fmt(a.spf,1):"–", cls:"teal"},
+        {k:"Abdeckung der Karte", v:fmt(a.coverage*100,0)+"%", cls:"teal"},
+        {k:"Wiederbesuchs-Quote", v:fmt(a.revisitRate*100,0)+"%", cls:"violet"},
+        {k:"Stand-Anteil", v:fmt(a.idleRate*100,0)+"%", cls:"violet"},
+        ];
+        $("anaStats").innerHTML=items.map(it=>
+        '<div class="item '+it.cls+'"><div class="k">'+it.k+'</div><div class="v mono">'+it.v+'</div></div>').join("");
+        // Waende fuer die Heatmap mit einzeichnen
+        drawHeatmap(a);
+        const cv=$("anaHeat"), ctx=cv.getContext("2d");
+        const dpr=window.devicePixelRatio||1;
+        const w=cv.clientWidth, h=cv.clientHeight;
+        const cs=Math.min(w/a.W,h/a.H), ox=(w-a.W*cs)/2, oy=(h-a.H*cs)/2;
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.fillStyle="#23303d";
+        for(const idx of rep.walls){
+        const x=idx%a.W, y=(idx/a.W)|0;
+        ctx.fillRect(ox+x*cs+0.5, oy+y*cs+0.5, cs-1, cs-1);
+        }
+        $("anaPanel").scrollIntoView({behavior:"smooth",block:"start"});
+        }catch(e){
+        msg("Keine Analysedaten für „"+m.name+"“ verfügbar ("+e.message+").","err");
+        }
+        }
+
+        // ---- Lokale Replay-Datei oeffnen ----
+        $("fileOpenBtn").addEventListener("click", ()=>$("fileOpen").click());
+        $("fileOpen").addEventListener("change", e=>{
+        const file=e.target.files && e.target.files[0];
+        if(!file) return;
+        const reader=new FileReader();
+        reader.onload=()=>{
+        try{
+        const rep=JSON.parse(reader.result);
+        if(!rep.frames || !rep.frames.length) throw new Error("kein 'frames'-Feld");
+        const m={
+        id:"local:"+file.name, name:file.name.replace(/\.json$/i,""),
+        generation:rep.generation, fitness:null, food:rep.food, steps:rep.steps,
+        savedAt:null, local:true, replay:rep,
+        };
+        models.unshift(m);
+        activeKey="0";
+        renderModels();
+        showDemo(m);
+        msg("„"+m.name+"“ geöffnet.","ok");
+        }catch(err){
+        msg("Datei ist kein gültiges Replay-JSON ("+err.message+").","err");
+        }
+        };
+        reader.readAsText(file);
+        e.target.value="";          // gleiche Datei erneut waehlbar
+        });
+        $("modelsRefresh").addEventListener("click", ()=>refreshModels(true));
+
+        return { refreshModels };
+        })();
+
+        /* ---------- Start ---------- */
+        window.addEventListener("resize",()=>{ if(lastData && currentView==="training") renderStatus(lastData); });
+        routeFromHash();
         poll(); setInterval(poll,1000);
-        requestAnimationFrame(arenaLoop);   // weiche, tempo-/pausierbare Replay-Animation
     </script>
 </body>
 </html>

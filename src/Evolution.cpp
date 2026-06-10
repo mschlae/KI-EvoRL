@@ -1,5 +1,34 @@
 // ============================================================
-//  Evolution.cpp
+//  Evolution.cpp  (optimierte Version)
+//
+//  WICHTIG: Alle Funktionssignaturen und Member-Zugriffe sind
+//  unveraendert -> Evolution.h und der Rest des Projekts
+//  brauchen NICHT angepasst zu werden.
+//
+//  Optimierungen gegenueber der Vorversion:
+//   [OPT-1] Novelty-Berechnung: parallelisiert (OpenMP) und
+//           nth_element statt vollstaendigem sort (k-naechste
+//           Nachbarn brauchen keine Vollsortierung).
+//           -> aus O(P^2 log P) seriell wird O(P^2) parallel.
+//   [OPT-2] Populations-Sortierung: Es werden Indizes sortiert
+//           und die ~200-KB-Brains nur EINMAL umkopiert, statt
+//           sie waehrend std::sort O(n log n)-mal zu bewegen.
+//   [OPT-3] Hall of Fame: pro Generation wird ein Schwellwert
+//           gecacht; nur Kandidaten oberhalb der Schwelle
+//           durchlaufen noch updateHallOfFame().
+//   [OPT-4] Replay-Aufzeichnung nur noch alle 10 Generationen
+//           (so wie es der Kommentar im Original bereits
+//           vorsah). recordReplay() simuliert eine komplette
+//           Episode und ist damit einer der teuersten
+//           Einzelposten pro Generation.
+//   [OPT-5] measureDiversity(): parallelisiert.
+//   [OPT-6] recordReplay(): Food-Diff pro Frame nur noch ueber
+//           die tatsaechlich betretene Zelle statt ueber das
+//           gesamte Grid pruefen -- Fallback-Vollscan bleibt
+//           fuer Food-Respawns erhalten, aber seltener.
+//           (Konservativ gehalten: Vollscan pro Frame bleibt,
+//           da World-Interna hier nicht bekannt sind; siehe
+//           Kommentar an der Stelle.)
 // ============================================================
 #include "Evolution.h"
 #include "MathUtils.h"
@@ -13,6 +42,7 @@
 #include <numeric>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include <omp.h>
 
@@ -24,18 +54,18 @@ Evolution::Evolution()
     boostActive(false), boost2Active(false) {
     population.resize(POPULATION_SIZE);
     globalBest.baseFitness = globalBestBase.baseFitness = -1e30f;
-    cout << "Optimierte Evolution v4. Population: " << POPULATION_SIZE << "\n";
+    cout << "Optimierte Evolution v5. Population: " << POPULATION_SIZE << "\n";
     cout << "INPUTS=" << INPUTS << " HIDDEN=" << HIDDEN << "\n";
 }
 
 // --------------------------------------------------------
 //  FITNESS: monotone Food-Belohnung, manipulationssicher
+//  (Logik unveraendert, nur RuntimeConfig wird einmal geholt)
 // --------------------------------------------------------
 float Evolution::computeBaseFitness(const World& w) {
     float visitedFrac = w.visited.count() / float((GRID_W - 2) * (GRID_H - 2));
 
     // Food-Hauptsignal: streng monoton steigend, leicht abnehmend
-    // Use runtime-configurable food reward scaling
     auto rcfg = getRuntimeConfig();
     float baseUnit = rcfg.foodReward > 0 ? rcfg.foodReward : 60.0f;
     float foodBonus;
@@ -57,7 +87,6 @@ float Evolution::computeBaseFitness(const World& w) {
     float survivalSeed = min(w.steps, 300) * 0.02f;
 
     // totalReward (Shaping) nur gedaempft einfliessen lassen.
-    // rewardWeight skaliert den Anteil von totalReward am BaseFitness
     return rcfg.rewardWeight * w.totalReward + foodBonus + efficiencyBonus + exploreBonus + survivalSeed;
 }
 
@@ -125,38 +154,65 @@ void Evolution::speciate() {
         if (cnt[i] > 0) speciesFitness[i] /= cnt[i];
 }
 
+// --------------------------------------------------------
+//  [OPT-1] Novelty: parallel + nth_element statt sort
+// --------------------------------------------------------
 void Evolution::computeNoveltyBonus() {
     if (generation < NOVELTY_START_GEN) return;
     float prog = min(1.0f, float(generation) / 400.0f);
     float w = NOVELTY_WEIGHT_START - prog * (NOVELTY_WEIGHT_START - NOVELTY_WEIGHT_END);
     const int k = 15;
     int P = (int)population.size();
+    int A = (int)noveltyArchive.size();
 
     float meanBase = 0;
     for (auto& ind : population) meanBase += fabsf(ind.baseFitness);
     meanBase /= max(1, P);
     float scale = (meanBase > 1.0f ? meanBase : 1.0f);
 
-    auto bdist = [](const float* a, const float* b) {
-        float s = 0; for (int z = 0; z < 36; z++) { float d = a[z] - b[z]; s += d * d; } return sqrtf(s);
+    // Behavior-Vektoren einmalig kompakt zusammenkopieren (Cache-freundlich,
+    // und der parallele Teil liest nur noch aus diesem Block).
+    vector<float> beh((size_t)(P + A) * 36);
+    for (int i = 0; i < P; i++)
+        for (int z = 0; z < 36; z++) beh[(size_t)i * 36 + z] = population[i].behavior[z];
+    for (int a = 0; a < A; a++)
+        for (int z = 0; z < 36; z++) beh[(size_t)(P + a) * 36 + z] = noveltyArchive[a][z];
+
+    auto bdist2 = [&](int i, int j) {       // quadrierte Distanz reicht fuer die Auswahl
+        const float* a = &beh[(size_t)i * 36];
+        const float* b = &beh[(size_t)j * 36];
+        float s = 0;
+        for (int z = 0; z < 36; z++) { float d = a[z] - b[z]; s += d * d; }
+        return s;
         };
 
     vector<float> nov(P, 0.0f);
-    for (int i = 0; i < P; i++) {
-        vector<float> dists; dists.reserve(P - 1 + noveltyArchive.size());
-        for (int j = 0; j < P; j++) {
-            if (i == j) continue;
-            dists.push_back(bdist(population[i].behavior, population[j].behavior));
+#pragma omp parallel
+    {
+        vector<float> dists;                 // pro Thread wiederverwendet
+        dists.reserve((size_t)P + A);
+#pragma omp for schedule(dynamic, 8)
+        for (int i = 0; i < P; i++) {
+            dists.clear();
+            for (int j = 0; j < P; j++) {
+                if (i == j) continue;
+                dists.push_back(bdist2(i, j));
+            }
+            for (int a = 0; a < A; a++)
+                dists.push_back(bdist2(i, P + a));
+
+            int lim = min(k, (int)dists.size());
+            if (lim > 0 && lim < (int)dists.size())
+                nth_element(dists.begin(), dists.begin() + lim, dists.end());
+
+            float avg = 0;
+            for (int d = 0; d < lim; d++) avg += sqrtf(dists[d]);  // erst hier die Wurzel
+            avg /= (lim > 0 ? lim : 1.0f);
+            nov[i] = avg;
+            population[i].novelty = avg;
         }
-        for (auto& a : noveltyArchive)
-            dists.push_back(bdist(population[i].behavior, a.data()));
-        sort(dists.begin(), dists.end());
-        float avg = 0; int lim = min(k, (int)dists.size());
-        for (int d = 0; d < lim; d++) avg += dists[d];
-        avg /= (lim > 0 ? lim : 1.0f);
-        nov[i] = avg;
-        population[i].novelty = avg;
     }
+
     for (int i = 0; i < P; i++)
         population[i].fitness += w * nov[i] * scale * 0.25f;
 
@@ -166,11 +222,19 @@ void Evolution::computeNoveltyBonus() {
     if ((int)noveltyArchive.size() > 300) noveltyArchive.erase(noveltyArchive.begin());
 }
 
+// --------------------------------------------------------
+//  [OPT-5] Diversitaet: parallelisiert
+// --------------------------------------------------------
 float Evolution::measureDiversity() {
     int ss = min(30, POPULATION_SIZE);
     float tot = 0; int cnt = 0;
-    for (int i = 0; i < ss; i++)
-        for (int j = i + 1; j < ss; j++) { tot += (1.0f - population[i].similarity(population[j])); cnt++; }
+#pragma omp parallel for reduction(+:tot,cnt) schedule(dynamic)
+    for (int i = 0; i < ss; i++) {
+        for (int j = i + 1; j < ss; j++) {
+            tot += (1.0f - population[i].similarity(population[j]));
+            cnt++;
+        }
+    }
     return cnt > 0 ? tot / cnt : 0.0f;
 }
 
@@ -230,18 +294,46 @@ void Evolution::train() {
         for (int i = 0; i < POPULATION_SIZE; i++)
             evaluate(population[i], false, true, genSeeds);
 
-        // Besten merken
+        // ---- Besten merken ----
+        // [OPT-3] Hall-of-Fame-Schwelle cachen: die teure updateHallOfFame()
+        // (min_element + evtl. 200-KB-Kopie) wird nur noch fuer Kandidaten
+        // aufgerufen, die die aktuelle HOF-Untergrenze ueberhaupt schlagen.
+        float hofMin = -1e30f;
+        if ((int)hallOfFame.size() >= HALL_OF_FAME_SIZE) {
+            hofMin = 1e30f;
+            for (auto& h : hallOfFame) hofMin = min(hofMin, h.baseFitness);
+        }
         for (auto& ind : population) {
             if (ind.baseFitness > globalBestBase.baseFitness) globalBestBase = ind;
             if (ind.baseFitness > globalBest.baseFitness)     globalBest = ind;
-            updateHallOfFame(ind);
+            if (ind.baseFitness > hofMin) {
+                updateHallOfFame(ind);
+                if ((int)hallOfFame.size() >= HALL_OF_FAME_SIZE) {
+                    hofMin = 1e30f;
+                    for (auto& h : hallOfFame) hofMin = min(hofMin, h.baseFitness);
+                }
+            }
         }
 
         speciate();
         computeNoveltyBonus();
 
-        sort(population.begin(), population.end(),
-            [](const Brain& a, const Brain& b) { return a.fitness > b.fitness; });
+        // ---- [OPT-2] Indizes sortieren statt 200-KB-Brains ----
+        // std::sort wuerde die grossen Brain-Objekte O(n log n)-mal bewegen.
+        // Stattdessen: Index-Sortierung + genau EIN Umkopieren in der
+        // Zielreihenfolge. Verhalten (population absteigend nach fitness)
+        // ist identisch zur Vorversion.
+        {
+            vector<int> order(POPULATION_SIZE);
+            iota(order.begin(), order.end(), 0);
+            sort(order.begin(), order.end(), [&](int a, int b) {
+                return population[a].fitness > population[b].fitness;
+                });
+            vector<Brain> sorted;
+            sorted.reserve(POPULATION_SIZE);
+            for (int idx : order) sorted.push_back(move(population[idx]));
+            population = move(sorted);
+        }
 
         // Stagnationspruefung gegen beste je erreichte SAUBERE baseFitness
         float genBestBase = -1e30f;
@@ -264,7 +356,6 @@ void Evolution::train() {
         for (auto& ind : population) { avgFit += ind.fitness; avgStep += ind.steps; avgFood += ind.food; }
         avgFit /= POPULATION_SIZE; avgStep /= POPULATION_SIZE; avgFood /= POPULATION_SIZE;
         if (avgFood < 1) avgFood = 1;
-
 
         cout << "Gen " << generation + 1 << "/" << GENERATIONS
             << " | Score=" << (avgFit + avgFood * 5 + avgStep) / 100
@@ -301,15 +392,17 @@ void Evolution::train() {
             rec.diversity = diversity;
             rec.species = (int)speciesRepresentatives.size();
 
-            // ---------- GE�NDERT: Replay nur alle 10 Generationen ----------
+            // [OPT-4] Replay nur alle 10 Generationen aufzeichnen
+            // (recordReplay simuliert eine komplette Episode und ist teuer).
+            // Im Original stand der Aufruf versehentlich AUSSERHALB des
+            // if-Blocks und lief damit jede Generation.
             if (generation % 10 == 0) {
-                
+                monitor_->setReplay(recordReplay(population[0], genSeeds[0], generation + 1));
             }
-            monitor_->setReplay(recordReplay(population[0], genSeeds[0], generation + 1));
             monitor_->update(rec, globalBest.baseFitness, globalBest.food,
                 g_curriculum_difficulty, inject, GENERATIONS);
         }
-        
+
         // ---- Neue Generation erzeugen ----
         vector<Brain> next;
         next.reserve(POPULATION_SIZE);
@@ -399,6 +492,12 @@ void Evolution::train() {
 //    - Agentenposition pro Frame
 //    - Nahrungs-Aenderungen als Events [frame, typ, index]
 //      (typ 0 = entfernt/gefressen, typ 1 = neu erschienen)
+//
+//  Hinweis zur Performance: Der Vollscan ueber World::CELLS pro
+//  Frame bleibt bewusst erhalten, weil Food-Respawns an
+//  beliebigen Zellen auftreten koennen und die World-Interna
+//  hier nicht bekannt sind. Da die Aufzeichnung jetzt nur noch
+//  alle 10 Generationen laeuft [OPT-4], ist das unkritisch.
 // --------------------------------------------------------
 std::string Evolution::recordReplay(Brain brain, uint64_t seed, int genLabel) {
     set_local_seed(seed);
