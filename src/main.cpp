@@ -31,6 +31,7 @@ namespace {
         bool server = true;
         bool wait = true;
         bool demo = true;
+        bool mask = true;
         bool quiet = false;
         bool help = false;
         bool bad = false;
@@ -47,6 +48,7 @@ namespace {
             "  --no-server       ohne Web-Dashboard (headless)\n"
             "  --no-wait         am Ende nicht auf ENTER warten\n"
             "  --no-demo         keine Konsolen-Demo des besten Agenten\n"
+            "  --no-mask         Aktionsmaske aus (Zuege in Waende sind dann erlaubt und werden bestraft)\n"
             "  --quiet           keine Zeile pro Generation ausgeben\n"
             "  --help            diese Hilfe\n";
     }
@@ -85,6 +87,7 @@ namespace {
             else if (a == "--no-server") o.server = false;
             else if (a == "--no-wait") o.wait = false;
             else if (a == "--no-demo") o.demo = false;
+            else if (a == "--no-mask") o.mask = false;
             else if (a == "--quiet") o.quiet = true;
             else { std::cerr << "Unbekannte Option: " << a << "\n"; o.bad = true; }
         }
@@ -102,6 +105,11 @@ int main(int argc, char** argv) {
     std::cout << "EvoRL - evolutionaere RL-KI (GRU-Neuroevolution)\n";
     if (opt.server) std::cout << "Web-Dashboard: http://localhost:" << opt.port << "\n\n";
 
+    {
+        RuntimeConfig cfg = getRuntimeConfig();
+        cfg.maskBlocked = opt.mask;
+        setRuntimeConfig(cfg);
+    }
     TrainingMonitor monitor(opt.modelsDir);
     g_monitor = &monitor;
     std::signal(SIGINT, onSignal);

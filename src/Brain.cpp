@@ -90,17 +90,36 @@ void Brain::forward(const array<float, INPUTS>& inp, float logits[OUTPUTS]) {
         logits[o] = bias_out[o] + dot(W_out[o], hidden_state, HIDDEN);
 }
 
-int Brain::sampleAction(float p[OUTPUTS], Rng& rng) {
+int Brain::sampleAction(float p[OUTPUTS], Rng& rng, float temperature, uint8_t blockedMask) {
+    constexpr uint8_t ALL = (1u << OUTPUTS) - 1;
+    blockedMask &= ALL;
+    if (blockedMask == ALL) blockedMask = 0;   // nichts frei -> Maske ignorieren
+    for (int i = 0; i < OUTPUTS; i++)
+        if (blockedMask & (1u << i)) p[i] = -1e30f;
+
+    if (temperature < 0.001f) {                // greedy
+        int best = 0;
+        for (int i = 1; i < OUTPUTS; i++) if (p[i] > p[best]) best = i;
+        return best;
+    }
+    if (temperature != 1.0f)
+        for (int i = 0; i < OUTPUTS; i++) p[i] /= temperature;
     softmax_inplace(p, OUTPUTS);
     float rv = rng.uniform01(), cum = 0;
-    for (int i = 0; i < OUTPUTS; i++) { cum += p[i]; if (rv < cum) return i; }
-    return OUTPUTS - 1;
+    int last = 0;
+    for (int i = 0; i < OUTPUTS; i++) {
+        if (blockedMask & (1u << i)) continue;
+        last = i;
+        cum += p[i];
+        if (rv < cum) return i;
+    }
+    return last;                               // Rundungsrest -> letzte freie Aktion
 }
 
-int Brain::selectAction(const array<float, INPUTS>& inp, Rng& rng) {
+int Brain::selectAction(const array<float, INPUTS>& inp, Rng& rng, float temperature, uint8_t blockedMask) {
     float p[OUTPUTS];
     forward(inp, p);
-    return sampleAction(p, rng);
+    return sampleAction(p, rng, temperature, blockedMask);
 }
 
 void Brain::mutate(float globalStrength, float forceSigma) {

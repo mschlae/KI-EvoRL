@@ -8,7 +8,7 @@
 //                 fester Engine-Weltgroesse, Vorfuehrung, Analyse
 //    #/training - Live-Telemetrie + "Modell sichern"
 //  Backend-Endpunkte (alle im HttpServer umgesetzt):
-//    GET  /api/status   (enthaelt gridW/gridH, hasBest)
+//    GET  /api/status   (enthaelt gridW/gridH, hasBest, benchmark)
 //    GET  /api/replay   POST /api/stop   GET|POST /api/config
 //    GET  /api/models                 - Bibliothek (live + gespeichert)
 //    POST /api/models/save            - aktuell bestes Brain sichern
@@ -532,6 +532,14 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
           <div class="card"><div class="label">Spezies</div><div class="value mono" id="species">–</div></div>
         </section>
 
+        <section class="cards" aria-label="Benchmark">
+          <div class="card teal"><div class="label">Benchmark · Schritte / Nahrung</div><div class="value mono" id="bSpf">–</div></div>
+          <div class="card teal"><div class="label">Benchmark · Umwegfaktor</div><div class="value mono" id="bDetour">–</div></div>
+          <div class="card"><div class="label">Benchmark · Kollisionen / Episode</div><div class="value mono" id="bColl">–</div></div>
+          <div class="card"><div class="label">Benchmark · Food / Episode</div><div class="value mono" id="bFood">–</div></div>
+          <div class="card"><div class="label">Benchmark · Überlebt</div><div class="value mono" id="bSurv">–</div></div>
+        </section>
+
         <div class="panel">
           <div class="panel-head">
             <h2>Modell sichern</h2>
@@ -635,6 +643,16 @@ const char* DASHBOARD_HTML = R"EVORLHTML(<!DOCTYPE html>
             <h2>Effizienz · Schritte / Nahrung</h2>
             <div class="legend"><span><i style="background:var(--amber)"></i>Best</span><span><i style="background:var(--teal)"></i>Ø</span><span style="margin-left:auto;color:var(--muted)">niedriger = besser</span></div>
             <canvas id="spfChart"></canvas>
+          </div>
+          <div class="chart">
+            <h2>Benchmark · Schritte / Nahrung (greedy, feste Karten)</h2>
+            <div class="legend"><span><i style="background:var(--amber)"></i>Schritte / Nahrung</span><span style="margin-left:auto;color:var(--muted)">niedriger = besser</span></div>
+            <canvas id="benchChart"></canvas>
+          </div>
+          <div class="chart">
+            <h2>Benchmark · Umwegfaktor</h2>
+            <div class="legend"><span><i style="background:var(--teal)"></i>gelaufen / kürzester Weg</span><span style="margin-left:auto;color:var(--muted)">1,0 = perfekt</span></div>
+            <canvas id="detourChart"></canvas>
           </div>
         </section>
 
@@ -925,6 +943,13 @@ function renderStatus(d){
   $("div").textContent=fmt(d.diversity,3);
   $("species").textContent=fmt(d.species,0);
 
+  const B=d.benchmark;
+  $("bSpf").textContent=B?fmt(B.stepsPerFood,1):"–";
+  $("bDetour").textContent=B?fmt(B.detour,2):"–";
+  $("bColl").textContent=B?fmt(B.collisions,2):"–";
+  $("bFood").textContent=B?fmt(B.avgFood,1):"–";
+  $("bSurv").textContent=B?fmt(B.survived*100,0)+"%":"–";
+
   if(currentView==="training"){
     const H=d.history||{};
     drawChart($("fitChart"),[
@@ -938,6 +963,13 @@ function renderStatus(d){
     drawChart($("spfChart"),[
       {data:H.bestSpf||[],color:getCss('--amber')},
       {data:H.avgSpf||[], color:getCss('--teal')},
+    ]);
+    const BH=d.benchHistory||{};
+    drawChart($("benchChart"),[
+      {data:BH.stepsPerFood||[],color:getCss('--amber')},
+    ]);
+    drawChart($("detourChart"),[
+      {data:BH.detour||[],color:getCss('--teal')},
     ]);
   }
 }

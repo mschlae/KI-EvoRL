@@ -76,8 +76,16 @@ float Evolution::computeBaseFitness(const World& w) const {
     // Kleiner Start-Lerngradient (gedeckelt -> kein Dauerwandern)
     float survivalSeed = min(w.steps, 300) * 0.02f;
 
+    // Direktheit: Futter zaehlt voll, wenn der Weg dorthin dem kuerzesten entspricht, und
+    // anteilig weniger bei Umwegen. Kollisionen werden zusaetzlich direkt bestraft.
+    float directness = 0.0f;
+    if (w.foodEaten >= 3)
+        directness = DIRECTNESS_WEIGHT * w.foodEaten / max(1.0f, w.meanDetour()) * c.efficiencyBonus;
+    float collisionPenalty = COLLISION_FITNESS_PENALTY * w.collisions;
+
     // totalReward (Shaping) nur gedaempft einfliessen lassen.
-    return c.rewardWeight * w.totalReward + foodBonus + efficiencyBonus + exploreBonus + survivalSeed;
+    return c.rewardWeight * w.totalReward + foodBonus + efficiencyBonus + exploreBonus + survivalSeed
+        + directness - collisionPenalty;
 }
 
 float Evolution::evaluate(Brain& brain, bool visualize, const uint64_t* seeds) {
@@ -93,7 +101,8 @@ float Evolution::evaluate(Brain& brain, bool visualize, const uint64_t* seeds) {
         brain.resetHidden();
         while (world.alive && world.steps < MAX_EPISODE_STEPS) {
             auto sens = world.getSensors();
-            int act = brain.selectAction(sens, world.rng);
+            uint8_t mask = world.cfg.maskBlocked ? world.blockedMask() : 0;
+            int act = brain.selectAction(sens, world.rng, visualize ? 0.0f : policyTemp_, mask);
             world.executeAction(act);
             if (visualize) {
                 cout << "\033[2J\033[1;1H";
@@ -405,7 +414,22 @@ void Evolution::reportGeneration(float diversity, bool inject, const vector<uint
         cout << "\n";
     }
 
+    // Benchmark der aktuell besten sauberen Politik (greedy, feste Karten)
+    BenchResult bench;
+    bool haveBench = generation % BENCH_INTERVAL == 0 && globalBestBase.baseFitness > kNegInf;
+    if (haveBench) {
+        bench = benchmark(globalBestBase, generation + 1);
+        if (opts_.verbose) {
+            cout << "   Benchmark (greedy, " << bench.episodes << " feste Karten): Food=" << bench.avgFood
+                << " | Schritte/Food=" << bench.stepsPerFood
+                << " | Kollisionen=" << bench.collisions
+                << " | Umweg=" << bench.detour
+                << " | ueberlebt=" << int(bench.survived * 100) << "%\n";
+        }
+    }
+
     if (!monitor_) return;
+    if (haveBench) monitor_->setBenchmark(bench);
     // SPF = Schritte pro Nahrung (niedriger = besser), zur Anzeige gedeckelt.
     auto cap = [](float v) { return v > 400.0f ? 400.0f : v; };
     GenRecord rec;
@@ -461,6 +485,13 @@ void Evolution::train() {
         difficulty_ = level;
         earlyStopLimit = 500 + int(progress * 900);                     // dynamisches Early-Stopping
 
+        // Politik-Temperatur: anfangs Zufall zum Erkunden, spaeter fast greedy
+        policyTemp_ = POLICY_TEMP_END
+            + (POLICY_TEMP_START - POLICY_TEMP_END) * max(0.0f, 1.0f - float(generation) / POLICY_TEMP_GENS);
+        // Erkundungsanreize (Bonus je neue Zelle/Zone, Fitness-Anteil) blenden aus, damit der
+        // reife Agent direkt zum Futter laeuft statt umherzustreifen. Nur die eingefrorene Kopie.
+        rcfg_.exploreBonus *= max(0.1f, 1.0f - float(generation) / EXPLORE_FADE_GENS);
+
         mutationStrength = max(MUTATION_STRENGTH_MIN,
             rcfg_.mutation * (1 - progress) + MUTATION_STRENGTH_FINAL * progress);
         if (boostActive) { mutationStrength = min(1.0f, mutationStrength * STAGNATION_BOOST_FACTOR); boostActive = false; }
@@ -502,6 +533,47 @@ void Evolution::train() {
 }
 
 // --------------------------------------------------------
+//  Benchmark: feste Karten, volle Schwierigkeit, greedy. Jede Karte ist unabhaengig
+//  (eigene Brain-Kopie) und wird parallel gerechnet; die Summen werden in fester
+//  Reihenfolge gebildet -> Ergebnis ist reproduzierbar.
+// --------------------------------------------------------
+BenchResult Evolution::benchmark(const Brain& brain, int generationLabel) const {
+    struct One { int food = 0, steps = 0, collisions = 0; float detourSum = 0; bool survived = false; };
+    vector<One> res(BENCH_MAPS);
+    RuntimeConfig cfg = rcfg_;
+    cfg.exploreBonus = getRuntimeConfig().exploreBonus;   // Karten/Regeln unabhaengig vom Ausblenden
+
+#pragma omp parallel for schedule(dynamic)
+    for (int m = 0; m < BENCH_MAPS; m++) {
+        set_local_seed(BENCH_SEED + (uint64_t)m);
+        World world(1.0f, cfg);
+        world.earlyStopLimit = BENCH_EARLY_STOP;
+        auto b = make_unique<Brain>(brain);
+        b->resetHidden();
+        while (world.alive && world.steps < MAX_EPISODE_STEPS) {
+            auto sens = world.getSensors();
+            uint8_t mask = cfg.maskBlocked ? world.blockedMask() : 0;
+            world.executeAction(b->selectAction(sens, world.rng, 0.0f, mask));
+        }
+        res[m] = { world.foodEaten, world.steps, world.collisions, world.detourSum,
+            world.alive && world.steps >= MAX_EPISODE_STEPS };
+    }
+
+    BenchResult r;
+    r.gen = generationLabel;
+    r.episodes = BENCH_MAPS;
+    long long food = 0, steps = 0, coll = 0; float detour = 0; int surv = 0;
+    for (const One& o : res) { food += o.food; steps += o.steps; coll += o.collisions; detour += o.detourSum; surv += o.survived; }
+    r.avgFood = float(food) / BENCH_MAPS;
+    r.avgSteps = float(steps) / BENCH_MAPS;
+    r.stepsPerFood = food > 0 ? float(steps) / float(food) : float(steps);
+    r.collisions = float(coll) / BENCH_MAPS;
+    r.detour = food > 0 ? detour / float(food) : 1.0f;
+    r.survived = float(surv) / BENCH_MAPS;
+    return r;
+}
+
+// --------------------------------------------------------
 //  Replay des besten Agenten auf einer festen Karte
 // --------------------------------------------------------
 string Evolution::recordReplay(const Brain& brain, uint64_t seed, int genLabel) {
@@ -509,5 +581,5 @@ string Evolution::recordReplay(const Brain& brain, uint64_t seed, int genLabel) 
     World world(difficulty_, rcfg_);
     world.earlyStopLimit = earlyStopLimit;
     auto copy = make_unique<Brain>(brain);   // forward() veraendert den Hidden-State
-    return buildReplayJson(world, *copy, genLabel, MAX_EPISODE_STEPS);
+    return buildReplayJson(world, *copy, genLabel, MAX_EPISODE_STEPS, 0.0f);
 }

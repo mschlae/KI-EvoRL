@@ -90,6 +90,50 @@ void TrainingMonitor::rebuildHistoryJson() {
     historyJson_ = os.str();
 }
 
+void TrainingMonitor::setBenchmark(const BenchResult& r) {
+    std::lock_guard<std::mutex> lk(m_);
+    benchHistory_.push_back(r);
+    if (benchHistory_.size() > MAX_HISTORY)
+        benchHistory_.erase(benchHistory_.begin(), benchHistory_.begin() + (benchHistory_.size() - MAX_HISTORY));
+    rebuildBenchJson();
+}
+
+void TrainingMonitor::rebuildBenchJson() {
+    std::ostringstream os;
+    os.setf(std::ios::fixed);
+    os.precision(3);
+    if (benchHistory_.empty()) { benchJson_ = "null"; benchHistoryJson_ = "{}"; return; }
+    const BenchResult& r = benchHistory_.back();
+    os << "{\"gen\":" << r.gen << ",\"episodes\":" << r.episodes
+        << ",\"avgFood\":" << safe(r.avgFood) << ",\"avgSteps\":" << safe(r.avgSteps)
+        << ",\"stepsPerFood\":" << safe(r.stepsPerFood) << ",\"collisions\":" << safe(r.collisions)
+        << ",\"detour\":" << safe(r.detour) << ",\"survived\":" << safe(r.survived) << '}';
+    benchJson_ = os.str();
+
+    std::ostringstream hs;
+    hs.setf(std::ios::fixed);
+    hs.precision(3);
+    auto arr = [&](const char* name, auto getter, bool last = false) {
+        hs << '"' << name << "\":[";
+        for (size_t i = 0; i < benchHistory_.size(); ++i) {
+            if (i) hs << ',';
+            auto v = getter(benchHistory_[i]);
+            if constexpr (std::is_floating_point_v<decltype(v)>) hs << safe(v);
+            else                                                 hs << v;
+        }
+        hs << ']';
+        if (!last) hs << ',';
+    };
+    hs << '{';
+    arr("gen", [](const BenchResult& b) { return b.gen; });
+    arr("avgFood", [](const BenchResult& b) { return b.avgFood; });
+    arr("stepsPerFood", [](const BenchResult& b) { return b.stepsPerFood; });
+    arr("collisions", [](const BenchResult& b) { return b.collisions; });
+    arr("detour", [](const BenchResult& b) { return b.detour; }, true);
+    hs << '}';
+    benchHistoryJson_ = hs.str();
+}
+
 void TrainingMonitor::setFinished() {
     finished_.store(true);
     running_.store(false);
@@ -140,6 +184,8 @@ std::string TrainingMonitor::toJson() const {
     os << "\"gridH\":" << GRID_H << ',';
     os << "\"hasBest\":" << (bestBrain_ ? "true" : "false") << ',';
     os << "\"history\":" << historyJson_ << ',';
+    os << "\"benchmark\":" << benchJson_ << ',';
+    os << "\"benchHistory\":" << benchHistoryJson_ << ',';
     os << "\"config\":" << cfg;
     os << '}';
     return os.str();
@@ -155,7 +201,8 @@ std::string TrainingMonitor::configJson() const {
         << "\"stepCost\":" << cfg.stepCost << ','
         << "\"rewardWeight\":" << cfg.rewardWeight << ','
         << "\"exploreBonus\":" << cfg.exploreBonus << ','
-        << "\"efficiencyBonus\":" << cfg.efficiencyBonus
+        << "\"efficiencyBonus\":" << cfg.efficiencyBonus << ','
+        << "\"maskBlocked\":" << (cfg.maskBlocked ? "true" : "false")
         << '}';
     return os.str();
 }
@@ -176,6 +223,10 @@ bool TrainingMonitor::applyConfigJson(const std::string& body) {
     take("rewardWeight", cfg.rewardWeight, 0.0f, 1000.0f);
     take("exploreBonus", cfg.exploreBonus, 0.0f, 1000.0f);
     take("efficiencyBonus", cfg.efficiencyBonus, 0.0f, 1000.0f);
+    float mb;
+    if (json::extractFloat(body, "maskBlocked", mb)) { cfg.maskBlocked = mb != 0.0f; any = true; }
+    else if (body.find("\"maskBlocked\":true") != std::string::npos) { cfg.maskBlocked = true; any = true; }
+    else if (body.find("\"maskBlocked\":false") != std::string::npos) { cfg.maskBlocked = false; any = true; }
     if (!any) return false;
     setRuntimeConfig(cfg);
     return true;
@@ -347,9 +398,14 @@ std::string TrainingMonitor::runPlaygroundJson(const std::string& body) const {
     if (json::extractFloat(body, "foodReward", v) && validCfg(v)) cfg.foodReward = std::max(0.0f, v);
     if (json::extractFloat(body, "stepCost", v) && validCfg(v)) cfg.stepCost = std::max(0.0f, v);
 
+    float temperature = 0.0f;   // Standard: greedy wie ein fertiges Modell
+    if (json::extractFloat(body, "temperature", v) && validCfg(v)) temperature = std::max(0.0f, std::min(v, 5.0f));
+    float mask;
+    if (json::extractFloat(body, "maskBlocked", mask)) cfg.maskBlocked = mask != 0.0f;
+
     set_local_seed(777ull);   // deterministische Respawns
     World world(1.0f, cfg, /*generate=*/false);
     world.earlyStopLimit = (int)maxSteps;
     world.loadCustomMap(map);
-    return buildReplayJson(world, *brain, gen, (int)maxSteps);
+    return buildReplayJson(world, *brain, gen, (int)maxSteps, temperature);
 }

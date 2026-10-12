@@ -13,7 +13,7 @@ namespace {
     }
 }
 
-std::string buildReplayJson(World& world, Brain& brain, int genLabel, int maxSteps) {
+std::string buildReplayJson(World& world, Brain& brain, int genLabel, int maxSteps, float temperature) {
     brain.resetHidden();
 
     std::string walls, food0;
@@ -37,7 +37,8 @@ std::string buildReplayJson(World& world, Brain& brain, int genLabel, int maxSte
 
     while (world.alive && world.steps < maxSteps) {
         auto sens = world.getSensors();
-        world.executeAction(brain.selectAction(sens, world.rng));
+        uint8_t mask = world.cfg.maskBlocked ? world.blockedMask() : 0;
+        world.executeAction(brain.selectAction(sens, world.rng, temperature, mask));
         pushFrame(false);
     }
     world.foodEventSink = nullptr;

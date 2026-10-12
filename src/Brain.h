@@ -41,10 +41,14 @@ struct Brain {
     void  resetHidden();
     // Hotspot des Programms (~90 % der Rechenzeit).
     void  forward(const std::array<float, INPUTS>& inp, float logits[OUTPUTS]);
-    // Softmax + stochastisches Ziehen einer Aktion aus rohen Logits.
-    static int sampleAction(float logits[OUTPUTS], Rng& rng);
+    // Aktion aus rohen Logits waehlen. `blockedMask` (Bit i = Aktion i gesperrt) schliesst
+    // Zuege aus, solange noch mindestens einer frei ist. temperature >= ~0.001: Softmax-
+    // Ziehen mit logits/temperature; darunter: greedy (hoechstes Logit, kein Zufall).
+    static int sampleAction(float logits[OUTPUTS], Rng& rng, float temperature = 1.0f,
+        uint8_t blockedMask = 0);
     // forward + sampleAction (nutzt den Hidden-State des Brains).
-    int   selectAction(const std::array<float, INPUTS>& inp, Rng& rng);
+    int   selectAction(const std::array<float, INPUTS>& inp, Rng& rng, float temperature = 1.0f,
+        uint8_t blockedMask = 0);
     void  mutate(float globalStrength, float forceSigma = -1.0f);
     float similarity(const Brain& o) const;
 

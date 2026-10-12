@@ -95,6 +95,7 @@
     <ClInclude Include="src\Brain.h" />
     <ClInclude Include="src\Replay.h" />
     <ClInclude Include="src\ModelStore.h" />
+    <ClInclude Include="src\Metrics.h" />
     <ClInclude Include="src\Evolution.h" />
     <ClInclude Include="src\TrainingMonitor.h" />
     <ClInclude Include="src\HttpServer.h" />
