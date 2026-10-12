@@ -23,6 +23,8 @@
     <ClCompile Include="src\Rng.cpp"><Filter>Core</Filter></ClCompile>
     <ClCompile Include="src\World.cpp"><Filter>Simulation</Filter></ClCompile>
     <ClCompile Include="src\Brain.cpp"><Filter>Simulation</Filter></ClCompile>
+    <ClCompile Include="src\Replay.cpp"><Filter>Simulation</Filter></ClCompile>
+    <ClCompile Include="src\ModelStore.cpp"><Filter>Web</Filter></ClCompile>
     <ClCompile Include="src\Evolution.cpp"><Filter>Evolution</Filter></ClCompile>
     <ClCompile Include="src\TrainingMonitor.cpp"><Filter>Web</Filter></ClCompile>
     <ClCompile Include="src\HttpServer.cpp"><Filter>Web</Filter></ClCompile>
@@ -32,8 +34,11 @@
     <ClInclude Include="src\Config.h"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="src\Rng.h"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="src\MathUtils.h"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="src\Json.h"><Filter>Web</Filter></ClInclude>
     <ClInclude Include="src\World.h"><Filter>Simulation</Filter></ClInclude>
     <ClInclude Include="src\Brain.h"><Filter>Simulation</Filter></ClInclude>
+    <ClInclude Include="src\Replay.h"><Filter>Simulation</Filter></ClInclude>
+    <ClInclude Include="src\ModelStore.h"><Filter>Web</Filter></ClInclude>
     <ClInclude Include="src\Evolution.h"><Filter>Evolution</Filter></ClInclude>
     <ClInclude Include="src\TrainingMonitor.h"><Filter>Web</Filter></ClInclude>
     <ClInclude Include="src\HttpServer.h"><Filter>Web</Filter></ClInclude>

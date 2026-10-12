@@ -5,27 +5,18 @@
 //  und Webserver (Consumer). Die Evolution schreibt pro Generation
 //  einen Snapshot, der Server serialisiert ihn als JSON.
 //
-//  Erweiterung (Modell-/Playground-API):
-//   - Der Monitor haelt zusaetzlich eine Kopie des aktuell besten
-//     Brains (live) und einen kleinen, auf Platte persistierten
-//     Modell-Speicher.
-//   - Damit kann der Webserver ohne Zugriff auf die Evolution:
-//       * das aktuell beste Modell ausliefern  (modelsJson / live)
-//       * das beste Modell speichern           (saveCurrentModelJson)
-//       * ein gespeichertes/Live-Modell als Replay simulieren
-//         (modelReplayJson)
-//       * ein Modell auf einer selbst gezeichneten Karte laufen
-//         lassen                               (runPlaygroundJson)
-//       * ein Modell zur Uebernahme ins Training vormerken
-//         (requestModelLoad / takePendingLoad)
-//   - Das Training ruft setBestBrain() pro Generation auf und
-//     pollt takePendingLoad(). Beides ist optional; fehlt der
-//     Monitor, laeuft alles unveraendert weiter.
+//  Zusaetzlich haelt der Monitor
+//   - eine Kopie des aktuell besten Brains (live),
+//   - die persistierte Modell-Bibliothek (siehe ModelStore),
+//   - ein vom Dashboard vorgemerktes Modell, das das Training
+//     in die Population uebernimmt (requestModelLoad / takePendingLoad).
 // ============================================================
 #include "Brain.h"
+#include "ModelStore.h"
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -44,21 +35,9 @@ struct GenRecord {
     int   species = 0;
 };
 
-// Ein gespeichertes Modell (Brain + Metadaten) in der Bibliothek.
-struct SavedModel {
-    std::string id;
-    std::string name;
-    int   generation = 0;
-    float fitness = 0;
-    int   food = 0;
-    int   steps = 0;
-    std::string savedAt;   // menschlich lesbarer Zeitstempel
-    Brain brain;
-};
-
 class TrainingMonitor {
 public:
-    TrainingMonitor();
+    explicit TrainingMonitor(std::string modelsDir = "models");
 
     // Vom Trainingsthread aufgerufen (eine Momentaufnahme pro Generation).
     void update(const GenRecord& rec,
@@ -77,7 +56,7 @@ public:
     void setFinished();
 
     // ---- Aktive Steuerung vom Dashboard ----
-    void requestStop() { stopRequested_.store(true); }
+    void requestStop() { stopRequested_.store(true); }   // lock-frei -> auch aus Signal-Handlern nutzbar
     bool stopRequested() const { return stopRequested_.load(); }
 
     // Aufgezeichnete Episode des aktuell besten Agenten (JSON, vom Training gesetzt).
@@ -89,24 +68,21 @@ public:
 
     // ---- Modell-/Playground-API ----
     // Pro Generation vom Training aufgerufen: kopiert das aktuell beste,
-    // "saubere" Brain (globalBestBase) inkl. Metadaten in den Monitor.
+    // "saubere" Brain inkl. Metadaten in den Monitor.
     void setBestBrain(const Brain& b, int generation);
     bool hasBestBrain() const;
 
-    // Bibliothek (JSON-Array). Enthaelt zuerst das Live-Modell (sofern
-    // vorhanden), danach die gespeicherten Modelle.
+    // Bibliothek (JSON-Array): zuerst das Live-Modell, danach die gespeicherten (neueste zuerst).
     std::string modelsJson() const;
 
-    // Speichert das aktuell beste Brain dauerhaft. Body darf {"name":"..."}
-    // enthalten. Gibt den neuen Bibliothekseintrag als JSON zurueck.
+    // Speichert das aktuell beste Brain dauerhaft. Body darf {"name":"..."} enthalten.
     std::string saveCurrentModelJson(const std::string& body);
 
-    // Simuliert eine Episode des Modells <id> (oder "live") auf einer
-    // Standardkarte und liefert das Replay-JSON (Format wie recordReplay).
+    // Simuliert eine Episode des Modells <id> (oder "live") auf einer Standardkarte.
     std::string modelReplayJson(const std::string& id) const;
 
     // Laesst ein Modell auf einer im Body uebergebenen Karte laufen.
-    std::string runPlaygroundJson(const std::string& body);
+    std::string runPlaygroundJson(const std::string& body) const;
 
     // Merkt ein Modell zur Uebernahme in die laufende Population vor.
     bool requestModelLoad(const std::string& id);
@@ -118,8 +94,11 @@ public:
     bool applyConfigJson(const std::string& jsonStr);
 
 private:
-    void loadModelsFromDisk();   // beim Start: vorhandene Modelle einlesen
+    // Brain zu "live" oder gespeicherter ID; false, wenn unbekannt.
+    bool findBrain(const std::string& id, std::unique_ptr<Brain>& out, int& gen) const;
+    void rebuildHistoryJson();   // nur unter m_ aufrufen
 
+    std::string modelsDir_;
     mutable std::mutex m_;
 
     GenRecord latest_{};
@@ -135,17 +114,19 @@ private:
 
     std::chrono::steady_clock::time_point start_;
     std::vector<GenRecord> history_;
+    std::string historyJson_ = "{}";   // vorserialisierte Verlaufs-Arrays (einmal je Generation)
     std::string replay_;
 
     // Live-bestes Brain (Kopie aus der Evolution).
-    Brain bestBrain_;
-    bool  haveBest_ = false;
+    std::shared_ptr<const Brain> bestBrain_;
     int   bestGen_ = 0;
+    float bestFitness_ = 0;
+    int   bestFood_ = 0;
+    int   bestSteps_ = 0;
 
     // Persistierte Modell-Bibliothek.
     std::vector<SavedModel> models_;
 
     // Vorgemerktes Modell zur Uebernahme ins Training.
-    Brain pendingBrain_;
-    bool  havePending_ = false;
+    std::shared_ptr<const Brain> pendingBrain_;
 };

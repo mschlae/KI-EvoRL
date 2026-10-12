@@ -3,8 +3,13 @@
 //  Brain.h  -  Rekurrentes GRU-Netz (das "Gehirn" eines Agenten)
 //  Besitzt eine selbstadaptive Mutationsstaerke (sigma) und
 //  einen 36-dimensionalen Verhaltensdeskriptor fuer Novelty Search.
+//
+//  ACHTUNG: Die Reihenfolge/Typen der Member sind Teil des alten
+//  Modellformats "BRN1" (rohes Struct-Abbild). Aenderungen am
+//  Layout machen aeltere gespeicherte Modelle unlesbar.
 // ============================================================
 #include "Config.h"
+#include "Rng.h"
 #include <array>
 
 struct Brain {
@@ -23,15 +28,23 @@ struct Brain {
     float fitness = 0, baseFitness = 0;
     int   steps = 0, food = 0;
     float novelty = 0;
-    float behavior[36] = {}; // Besuchsanteil je 6x6-Zone
+    float behavior[BEHAVIOR_DIM] = {}; // Besuchsanteil je 8x8-Zone
     int   speciesId = -1, stagnationCounter = 0;
     float sigma;
 
-    Brain();
+    struct NoInit {};           // Marker: Gewichte NICHT zufaellig fuellen (sparen den RNG-Aufwand)
+
+    Brain();                    // zufaellig initialisiert
+    explicit Brain(NoInit);     // Gewichte genullt, wird vom Aufrufer befuellt
 
     void  randomize();
     void  resetHidden();
+    // Hotspot des Programms (~90 % der Rechenzeit).
     void  forward(const std::array<float, INPUTS>& inp, float logits[OUTPUTS]);
+    // Softmax + stochastisches Ziehen einer Aktion aus rohen Logits.
+    static int sampleAction(float logits[OUTPUTS], Rng& rng);
+    // forward + sampleAction (nutzt den Hidden-State des Brains).
+    int   selectAction(const std::array<float, INPUTS>& inp, Rng& rng);
     void  mutate(float globalStrength, float forceSigma = -1.0f);
     float similarity(const Brain& o) const;
 

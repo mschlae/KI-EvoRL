@@ -42,7 +42,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <OpenMPSupport>true</OpenMPSupport>
@@ -59,7 +59,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <OpenMPSupport>true</OpenMPSupport>
@@ -78,6 +78,8 @@
     <ClCompile Include="src\Rng.cpp" />
     <ClCompile Include="src\World.cpp" />
     <ClCompile Include="src\Brain.cpp" />
+    <ClCompile Include="src\Replay.cpp" />
+    <ClCompile Include="src\ModelStore.cpp" />
     <ClCompile Include="src\Evolution.cpp" />
     <ClCompile Include="src\TrainingMonitor.cpp" />
     <ClCompile Include="src\HttpServer.cpp" />
@@ -88,8 +90,11 @@
     <ClInclude Include="src\Config.h" />
     <ClInclude Include="src\Rng.h" />
     <ClInclude Include="src\MathUtils.h" />
+    <ClInclude Include="src\Json.h" />
     <ClInclude Include="src\World.h" />
     <ClInclude Include="src\Brain.h" />
+    <ClInclude Include="src\Replay.h" />
+    <ClInclude Include="src\ModelStore.h" />
     <ClInclude Include="src\Evolution.h" />
     <ClInclude Include="src\TrainingMonitor.h" />
     <ClInclude Include="src\HttpServer.h" />
