@@ -36,7 +36,7 @@ constexpr int   OUTPUTS = 4;
 constexpr int   EVAL_REPEATS = 4;
 constexpr int   POPULATION_SIZE = 100;
 constexpr int   GENERATIONS = 10000;
-constexpr int   MAX_STEPS = 800000;
+constexpr int   MAX_STEPS = 800000;        // harte Obergrenze (Playground / Notbremse)
 constexpr int   ELITE_COUNT = 10;
 constexpr int   TOURNAMENT_SIZE = 6;
 constexpr int   HALL_OF_FAME_SIZE = 5;
@@ -74,17 +74,32 @@ constexpr int   MAX_EPISODE_STEPS = 1500; // feste Episodenlaenge -> Food vergle
 
 constexpr float MUTATION_FLOOR_FROM_GLOBAL = 0.6f; // Anteil der globalen Staerke als Untergrenze
 
+// Verhaltensdeskriptor (Novelty Search): Besuchsanteil je Zone
+constexpr int   ZONE_GRID = 6;                       // 6x6 Zonen
+constexpr int   ZONE_SIZE = 8;                       // Zellen pro Zone (Kantenlaenge)
+constexpr int   BEHAVIOR_DIM = ZONE_GRID * ZONE_GRID; // 36
+constexpr int   NOVELTY_K = 15;                      // k naechste Nachbarn
+constexpr int   NOVELTY_ARCHIVE_MAX = 300;
+constexpr int   NOVELTY_RAMP_GENS = 400;             // Gewicht faellt ueber so viele Generationen
+
+// Curriculum: Schwierigkeit steigt linear von 0 auf 1
+constexpr int   CURRICULUM_GENS = 150;
+
+// Adaptive Speziation: Schwelle wird so nachgefuehrt, dass ca. SPECIES_TARGET Arten entstehen
+constexpr float SPECIES_THRESHOLD_ADAPT = 0.03f;     // relative Aenderung der Distanzschwelle je Generation
+constexpr float SPECIES_THRESHOLD_MIN = 0.50f;
+constexpr float SPECIES_THRESHOLD_MAX = 0.9995f;
+
+// Dashboard
+constexpr int   REPLAY_INTERVAL = 10;                // Replay des Besten alle N Generationen
+
 // ----- Webserver -----
 constexpr int   WEB_SERVER_PORT = 8080;
-
-// ----- Globaler Curriculum-Schwierigkeitsgrad -----
-// Wird von Evolution::train() gesetzt und von World::reset() gelesen.
-extern float g_curriculum_difficulty;
 
 // ----- Laufzeit-Parameter (können per Dashboard geändert werden) -----
 // Diese Werte sind veränderlich und werden zur Laufzeit gelesen.
 struct RuntimeConfig {
-	float mutation = MUTATION_STRENGTH_INIT; // initiale Mutationsstärke
+	float mutation = MUTATION_STRENGTH_INIT; // Start-Mutationsstärke (fällt linear auf MUTATION_STRENGTH_FINAL)
 	float foodReward = FOOD_REWARD;
 	float stepCost = STEP_COST;
 	float rewardWeight = 0.3f; // Anteil von totalReward in Fitness

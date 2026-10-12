@@ -4,8 +4,14 @@
 //  Enthaelt Nahrung, Hindernisse, Biome und den Agenten.
 //  Liefert 77 Sensorwerte und verarbeitet Aktionen inkl.
 //  Reward-Shaping, Anti-Loop-Logik und Early-Stopping.
+//
+//  Eine World haelt ihre eigene Kopie der RuntimeConfig (wird bei
+//  der Konstruktion eingefroren). Dadurch gibt es im Schrittbetrieb
+//  keine Mutex-Zugriffe und Dashboard-Aenderungen wirken sich nicht
+//  mitten in einer Episode (oder Generation) aus.
 // ============================================================
 #include "Config.h"
+#include "Rng.h"
 #include <array>
 #include <bitset>
 #include <cstdint>
@@ -14,24 +20,47 @@
 
 enum Tile : uint8_t { EMPTY = 0, FOOD = 1, WALL = 2, OBSTACLE = 3 };
 
+// Aenderung am Nahrungsbestand (fuer Replays): step = Frame, in dem sie passiert.
+struct FoodEvent { int step; int idx; bool appeared; };
+
+// Vom Nutzer gezeichnete Karte (Playground). Indizes sind y * GRID_W + x.
+struct CustomMap {
+    std::vector<int> walls;
+    std::vector<int> food;
+    int startX = GRID_W / 2;
+    int startY = GRID_H / 2;
+};
+
 struct World {
     static constexpr int CELLS = GRID_W * GRID_H;
 
     std::array<Tile, CELLS> grid;
     std::array<int, CELLS>  biome;
     std::bitset<CELLS>      visited;
-    bool                    visitedZones[6][6] = {};
+    int                     visitedCount = 0;
+    bool                    visitedZones[ZONE_GRID][ZONE_GRID] = {};
 
     std::vector<int>        foodIndices;
     std::array<bool, CELLS> foodHere = {};
 
-    int   agentX, agentY;
+    int   agentX = 0, agentY = 0;
     int   lastAction = 0;
-    float energy;
-    bool  alive;
-    int   steps;
-    int   foodEaten;
-    float totalReward;
+    float energy = 0;
+    bool  alive = true;
+    int   steps = 0;
+    int   foodEaten = 0;
+    float totalReward = 0;
+
+    // Eigener Zufallsstrom (Karte, Respawns, Sensorrauschen, Aktionswahl). Wird bei der
+    // Konstruktion aus dem Thread-Generator gezogen -> set_local_seed() vor dem Erzeugen
+    // macht die ganze Episode reproduzierbar, und mehrere Welten koennen verzahnt laufen.
+    Rng rng;
+
+    RuntimeConfig cfg;        // eingefrorene Laufzeit-Parameter
+    float difficulty = 1.0f;  // Curriculum 0..1
+
+    // Optional: wird gesetzt, um Nahrungsaenderungen mitzuschreiben (Replay).
+    std::vector<FoodEvent>* foodEventSink = nullptr;
 
     // Anti-Loop-Ringpuffer
     std::array<std::pair<int, int>, ANTI_LOOP_MEMORY_SIZE> recentBuf;
@@ -50,7 +79,9 @@ struct World {
     int lastVisitedCount = 0;
     int lastFoodCount = 0;
 
-    World();
+    // Zufaellige Karte (generate = true) oder leere Huelle fuer loadCustomMap().
+    explicit World(float difficulty = 1.0f, const RuntimeConfig& cfg = getRuntimeConfig(),
+        bool generate = true);
 
     void  generateBiome(int x, int y, int type);
     void  rebuildFoodList();
@@ -58,8 +89,22 @@ struct World {
     void  removeFood(int idx);
     float nearestFoodDist();
     void  reset();
+    // Ersetzt die Karte durch eine eigene (Rand ist immer Wand) und startet die Episode neu.
+    void  loadCustomMap(const CustomMap& map);
 
     std::array<float, INPUTS> getSensors();
     float executeAction(int action);
-    void  display();
+    void  display() const;
+
+private:
+    struct Nearest { int idx = -1; int dist = 9999; };
+
+    void  buildBorder();
+    void  startEpisode();
+    bool  spawnFoodRandom();                 // true, wenn eine freie Zelle gefunden wurde
+    const Nearest& nearest();                // gecacht, bis Agent/Nahrung sich aendern
+    void  invalidateNearest() { nearestValid_ = false; }
+
+    Nearest nearestCache_;
+    bool    nearestValid_ = false;
 };

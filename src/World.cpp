@@ -2,23 +2,43 @@
 //  World.cpp
 // ============================================================
 #include "World.h"
-#include "Rng.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <string>
 
 using namespace std;
 
-World::World() { reset(); }
+namespace {
+    // Zellindex -> Koordinaten ohne Division/Modulo im Hotpath.
+    struct CellTables {
+        uint8_t x[World::CELLS];
+        uint8_t y[World::CELLS];
+        constexpr CellTables() : x{}, y{} {
+            for (int i = 0; i < World::CELLS; i++) { x[i] = uint8_t(i % GRID_W); y[i] = uint8_t(i / GRID_W); }
+        }
+    };
+    constexpr CellTables kCell{};
+
+    constexpr int kPlaceAttempts = 256;  // Obergrenze fuer Zufallssuche nach freien Zellen
+}
+
+World::World(float difficulty_, const RuntimeConfig& cfg_, bool generate)
+    : cfg(cfg_), difficulty(difficulty_) {
+    rng.seed(local_rng().next());
+    if (generate) reset();
+    else { buildBorder(); agentX = GRID_W / 2; agentY = GRID_H / 2; startEpisode(); }
+}
 
 void World::generateBiome(int x, int y, int type) {
     biome[y * GRID_W + x] = type;
     for (int dy = -2; dy <= 2; dy++)
         for (int dx = -2; dx <= 2; dx++) {
             int nx = x + dx, ny = y + dy;
-            if (nx >= 1 && nx < GRID_W - 1 && ny >= 1 && ny < GRID_H - 1 && randFloat(0, 1) < 0.3f)
+            if (nx >= 1 && nx < GRID_W - 1 && ny >= 1 && ny < GRID_H - 1 && rng.uniform01() < 0.3f)
                 biome[ny * GRID_W + nx] = type;
         }
 }
@@ -29,12 +49,15 @@ void World::rebuildFoodList() {
         if (grid[i] == FOOD) { foodIndices.push_back(i); foodHere[i] = true; }
         else                  foodHere[i] = false;
     }
+    invalidateNearest();
 }
 
 void World::placeFood(int idx) {
     grid[idx] = FOOD;
     foodHere[idx] = true;
     foodIndices.push_back(idx);
+    invalidateNearest();
+    if (foodEventSink) foodEventSink->push_back({ steps + 1, idx, true });
 }
 
 void World::removeFood(int idx) {
@@ -42,68 +65,122 @@ void World::removeFood(int idx) {
     foodHere[idx] = false;
     auto it = find(foodIndices.begin(), foodIndices.end(), idx);
     if (it != foodIndices.end()) { *it = foodIndices.back(); foodIndices.pop_back(); }
+    invalidateNearest();
+    if (foodEventSink) foodEventSink->push_back({ steps + 1, idx, false });
 }
 
-// Manhattan-Distanz zum naechsten Food
-float World::nearestFoodDist() {
-    int best = 9999;
-    for (int fi : foodIndices) {
-        int dx = fi % GRID_W - agentX, dy = fi / GRID_W - agentY;
-        int d = abs(dx) + abs(dy);
-        if (d < best) best = d;
+// Naechstes Food (Manhattan-Distanz); bei Gleichstand gewinnt das erste in foodIndices.
+const World::Nearest& World::nearest() {
+    if (!nearestValid_) {
+        Nearest n;
+        for (int fi : foodIndices) {
+            int d = abs(int(kCell.x[fi]) - agentX) + abs(int(kCell.y[fi]) - agentY);
+            if (d < n.dist) { n.dist = d; n.idx = fi; }
+        }
+        nearestCache_ = n;
+        nearestValid_ = true;
     }
-    return (float)best;
+    return nearestCache_;
 }
 
-void World::reset() {
+float World::nearestFoodDist() { return (float)nearest().dist; }
+
+bool World::spawnFoodRandom() {
+    for (int t = 0; t < kPlaceAttempts; t++) {
+        int fx = rng.integer(1, GRID_W - 2), fy = rng.integer(1, GRID_H - 2), fi = fy * GRID_W + fx;
+        if (grid[fi] == EMPTY) { placeFood(fi); return true; }
+    }
+    return false;  // Karte (nahezu) voll
+}
+
+void World::buildBorder() {
     grid.fill(EMPTY);
     biome.fill(0);
     memset(visitedZones, 0, sizeof(visitedZones));
-
     for (int x = 0; x < GRID_W; x++) { grid[x] = WALL; grid[(GRID_H - 1) * GRID_W + x] = WALL; }
     for (int y = 0; y < GRID_H; y++) { grid[y * GRID_W] = WALL; grid[y * GRID_W + GRID_W - 1] = WALL; }
+    foodIndices.clear();
+    foodHere.fill(false);
+}
+
+void World::startEpisode() {
+    energy = START_ENERGY; alive = true; steps = 0; foodEaten = 0; totalReward = 0;
+    lastAction = 0;
+    visited.reset();
+    visited.set(agentY * GRID_W + agentX);
+    visitedCount = 1;
+    recentIdx = 0; recentSize = 0;
+    lastPositions.fill({ 0, 0 }); lastPosCount = 0;
+    stepsSinceProgress = 0; lastVisitedCount = 1; lastFoodCount = 0;
+    invalidateNearest();
+    prevFoodDist = nearestFoodDist();
+}
+
+void World::reset() {
+    buildBorder();
 
     for (int i = 0; i < 20; i++)
-        generateBiome(randInt(5, GRID_W - 6), randInt(5, GRID_H - 6), randInt(0, NUM_BIOMES - 1));
+        generateBiome(rng.integer(5, GRID_W - 6), rng.integer(5, GRID_H - 6), rng.integer(0, NUM_BIOMES - 1));
 
-    int obsCnt = int(OBSTACLE_COUNT * g_curriculum_difficulty);
+    int obsCnt = int(OBSTACLE_COUNT * difficulty);
     for (int i = 0; i < obsCnt; i++) {
-        int ox, oy, idx;
-        do { ox = randInt(1, GRID_W - 2); oy = randInt(1, GRID_H - 2); idx = oy * GRID_W + ox; } while (grid[idx] != EMPTY);
-        grid[idx] = OBSTACLE;
+        for (int t = 0; t < kPlaceAttempts; t++) {
+            int ox = rng.integer(1, GRID_W - 2), oy = rng.integer(1, GRID_H - 2), idx = oy * GRID_W + ox;
+            if (grid[idx] == EMPTY) { grid[idx] = OBSTACLE; break; }
+        }
     }
 
-    int targetFood = int(BASE_FOOD_COUNT + (1.0f - g_curriculum_difficulty) * 10);
-    int placed = 0;
-    int attempts = 0;
+    int targetFood = int(BASE_FOOD_COUNT + (1.0f - difficulty) * 10);
+    int placed = 0, attempts = 0;
     while (placed < targetFood && attempts < 10000) {
         attempts++;
-        int x = randInt(1, GRID_W - 2), y = randInt(1, GRID_H - 2);
+        int x = rng.integer(1, GRID_W - 2), y = rng.integer(1, GRID_H - 2);
         int idx = y * GRID_W + x;
         if (grid[idx] != EMPTY) continue;
-        float prob = 0.14f;
+        float prob = 0.14f;                 // biomabhaengige Dichte
         if (biome[idx] == 1) prob = 0.28f;
         if (biome[idx] == 2) prob = 0.05f;
-        if (randFloat(0, 1) < prob) { grid[idx] = FOOD; placed++; }
+        if (rng.uniform01() < prob) { grid[idx] = FOOD; placed++; }
     }
     // Falls zu wenig Food platziert wurde, restliche direkt setzen
     while (placed < targetFood) {
-        int x = randInt(1, GRID_W - 2), y = randInt(1, GRID_H - 2), idx = y * GRID_W + x;
+        int x = rng.integer(1, GRID_W - 2), y = rng.integer(1, GRID_H - 2), idx = y * GRID_W + x;
         if (grid[idx] == EMPTY) { grid[idx] = FOOD; placed++; }
     }
     rebuildFoodList();
 
-    do { agentX = randInt(1, GRID_W - 2); agentY = randInt(1, GRID_H - 2); } while (grid[agentY * GRID_W + agentX] != EMPTY);
+    do { agentX = rng.integer(1, GRID_W - 2); agentY = rng.integer(1, GRID_H - 2); }
+    while (grid[agentY * GRID_W + agentX] != EMPTY);
 
-    // Read runtime parameters
-    auto rcfg = getRuntimeConfig();
-    energy = START_ENERGY; alive = true; steps = 0; foodEaten = 0; totalReward = 0;
-    visited.reset();
-    visited.set(agentY * GRID_W + agentX);
-    recentIdx = 0; recentSize = 0;
-    lastPositions.fill({ 0, 0 }); lastPosCount = 0;
-    stepsSinceProgress = 0; lastVisitedCount = 1; lastFoodCount = 0;
-    prevFoodDist = nearestFoodDist();
+    startEpisode();
+}
+
+void World::loadCustomMap(const CustomMap& map) {
+    buildBorder();
+    for (int idx : map.walls)
+        if (idx >= 0 && idx < CELLS) grid[idx] = WALL;
+    for (int idx : map.food)
+        if (idx >= 0 && idx < CELLS && grid[idx] == EMPTY) grid[idx] = FOOD;
+
+    int ax = max(1, min(GRID_W - 2, map.startX));
+    int ay = max(1, min(GRID_H - 2, map.startY));
+    int agIdx = ay * GRID_W + ax;
+    if (grid[agIdx] == WALL || grid[agIdx] == OBSTACLE) {
+        // naechste freie Zelle (nach Index-Abstand) suchen
+        int best = -1, bestD = 1 << 30;
+        for (int i = 0; i < CELLS; i++) {
+            if (grid[i] == WALL || grid[i] == OBSTACLE) continue;
+            int d = abs(int(kCell.x[i]) - ax) + abs(int(kCell.y[i]) - ay);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        if (best >= 0) agIdx = best;
+    }
+    if (grid[agIdx] == FOOD) grid[agIdx] = EMPTY;
+    agentX = agIdx % GRID_W;
+    agentY = agIdx / GRID_W;
+
+    rebuildFoodList();
+    startEpisode();
 }
 
 // --------------------------------------------------------
@@ -114,17 +191,11 @@ array<float, INPUTS> World::getSensors() {
     int agIdx = agentY * GRID_W + agentX;
 
     // [0..6] Naechstes Food: Distanz + normalisierte Richtung
-    int nearestIdx = -1; float minDist = 9999;
-    for (int fi : foodIndices) {
-        int fx = fi % GRID_W, fy = fi / GRID_W;
-        float d = (float)(abs(fx - agentX) + abs(fy - agentY));
-        if (d < minDist) { minDist = d; nearestIdx = fi; }
-    }
-    if (nearestIdx != -1) {
-        float invDist = 1.0f / (minDist + 1.0f);
-        s[0] = invDist;
-        float dx = (float)(nearestIdx % GRID_W - agentX);
-        float dy = (float)(nearestIdx / GRID_W - agentY);
+    const Nearest& nf = nearest();
+    if (nf.idx != -1) {
+        s[0] = 1.0f / (nf.dist + 1.0f);
+        float dx = (float)(int(kCell.x[nf.idx]) - agentX);
+        float dy = (float)(int(kCell.y[nf.idx]) - agentY);
         float len = sqrtf(dx * dx + dy * dy) + 1e-6f;
         s[1] = dx / len; // -1..1 (Ost/West)
         s[2] = dy / len; // -1..1 (Sued/Nord)
@@ -158,7 +229,7 @@ array<float, INPUTS> World::getSensors() {
     s[22] = biome[agIdx] / float(NUM_BIOMES - 1);
 
     // [23] Erkundungsfortschritt
-    s[23] = visited.count() / float((GRID_W - 2) * (GRID_H - 2));
+    s[23] = visitedCount / float((GRID_W - 2) * (GRID_H - 2));
 
     // [24] Wiederholungsrate (Anti-Loop)
     int rep = 0;
@@ -167,7 +238,7 @@ array<float, INPUTS> World::getSensors() {
     s[24] = rep / float(ANTI_LOOP_MEMORY_SIZE);
 
     // [25] Zufallsrauschen (Exploration)
-    s[25] = randFloat(-1.0f, 1.0f);
+    s[25] = rng.uniform(-1.0f, 1.0f);
 
     // [26..27] Gegessenes Food / Fooddichte
     s[26] = float(foodEaten) / 50.0f;
@@ -188,13 +259,10 @@ array<float, INPUTS> World::getSensors() {
             }
         }
     }
-    // base == 28 + 49 == 77 == INPUTS
-
     return s;
 }
 
 float World::executeAction(int action) {
-    auto rcfg = getRuntimeConfig();
     lastAction = action;
     int dx = 0, dy = 0;
     switch (action) {
@@ -205,13 +273,14 @@ float World::executeAction(int action) {
     }
     int nx = agentX + dx, ny = agentY + dy;
     int nIdx = ny * GRID_W + nx;
-    float reward = -rcfg.stepCost;
+    float reward = -cfg.stepCost;
 
     if (grid[nIdx] == WALL || grid[nIdx] == OBSTACLE) {
         reward += WALL_PENALTY;
     }
     else {
         agentX = nx; agentY = ny;
+        invalidateNearest();
         if (lastPosCount < 3) lastPosCount++;
         lastPositions[2] = lastPositions[1];
         lastPositions[1] = lastPositions[0];
@@ -220,10 +289,11 @@ float World::executeAction(int action) {
 
         // Erkundungsbonus
         if (!visited.test(curIdx)) {
-            reward += rcfg.exploreBonus;
+            reward += cfg.exploreBonus;
             visited.set(curIdx);
-            int zx = agentX / 8, zy = agentY / 8;
-            if (zx < 6 && zy < 6 && !visitedZones[zy][zx]) {
+            visitedCount++;
+            int zx = agentX / ZONE_SIZE, zy = agentY / ZONE_SIZE;
+            if (zx < ZONE_GRID && zy < ZONE_GRID && !visitedZones[zy][zx]) {
                 visitedZones[zy][zx] = true;
                 reward += NEW_ZONE_BONUS;
             }
@@ -243,21 +313,15 @@ float World::executeAction(int action) {
 
         // Food fressen
         if (grid[curIdx] == FOOD) {
-            reward += rcfg.foodReward;
+            reward += cfg.foodReward;
             removeFood(curIdx);
             foodEaten++;
-            energy += rcfg.foodReward * 0.4f; // Energie regenerieren beim Essen
+            energy += cfg.foodReward * 0.4f; // Energie regenerieren beim Essen
+            if (rng.uniform01() < FOOD_RESPAWN_RATE) spawnFoodRandom();
             prevFoodDist = nearestFoodDist();
-            if (randFloat(0, 1) < FOOD_RESPAWN_RATE) {
-                int fx, fy, fi;
-                do { fx = randInt(1, GRID_W - 2); fy = randInt(1, GRID_H - 2); fi = fy * GRID_W + fx; } while (grid[fi] != EMPTY);
-                placeFood(fi);
-            }
         }
-        else if (randFloat(0, 1) < FOOD_RESPAWN_RATE * 0.4f) {
-            int fx, fy, fi;
-            do { fx = randInt(1, GRID_W - 2); fy = randInt(1, GRID_H - 2); fi = fy * GRID_W + fx; } while (grid[fi] != EMPTY);
-            placeFood(fi);
+        else if (rng.uniform01() < FOOD_RESPAWN_RATE * 0.4f) {
+            spawnFoodRandom();
         }
     }
 
@@ -272,30 +336,29 @@ float World::executeAction(int action) {
     if (recentSize < ANTI_LOOP_MEMORY_SIZE) recentSize++;
 
     // Early-Stopping
-    int nowVisited = (int)visited.count(), nowFood = foodEaten;
-    if (nowVisited != lastVisitedCount || nowFood != lastFoodCount) {
-        stepsSinceProgress = 0; lastVisitedCount = nowVisited; lastFoodCount = nowFood;
+    if (visitedCount != lastVisitedCount || foodEaten != lastFoodCount) {
+        stepsSinceProgress = 0; lastVisitedCount = visitedCount; lastFoodCount = foodEaten;
     }
-    else {
-        if (++stepsSinceProgress > earlyStopLimit) alive = false;
+    else if (++stepsSinceProgress > earlyStopLimit) {
+        alive = false;
     }
     return reward;
 }
 
-void World::display() {
+void World::display() const {
+    string out;
+    out.reserve((GRID_W + 1) * GRID_H);
     for (int y = 0; y < GRID_H; y++) {
         for (int x = 0; x < GRID_W; x++) {
-            if (x == agentX && y == agentY) cout << 'A';
-            else {
-                Tile t = grid[y * GRID_W + x];
-                switch (t) {
-                case WALL:     cout << '#'; break;
-                case OBSTACLE: cout << 'X'; break;
-                case FOOD:     cout << 'o'; break;
-                default:       cout << '.';
-                }
+            if (x == agentX && y == agentY) { out += 'A'; continue; }
+            switch (grid[y * GRID_W + x]) {
+            case WALL:     out += '#'; break;
+            case OBSTACLE: out += 'X'; break;
+            case FOOD:     out += 'o'; break;
+            default:       out += '.';
             }
         }
-        cout << '\n';
+        out += '\n';
     }
+    cout << out;
 }
