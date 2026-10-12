@@ -5,6 +5,7 @@
 //  hack-sicherer Fitnessfunktion.
 // ============================================================
 #include "Brain.h"
+#include "Metrics.h"
 #include "World.h"
 
 #include <array>
@@ -52,6 +53,9 @@ public:
     int   tournamentSelect(const std::vector<int>& idxs);
     void  train();
 
+    // Misst die "fertige" Politik (greedy, Aktionsmaske laut Config) auf BENCH_MAPS festen Karten.
+    BenchResult benchmark(const Brain& brain, int generationLabel) const;
+
     // Zeichnet eine Episode eines Agenten auf einer festen Karte als JSON-Replay auf.
     std::string recordReplay(const Brain& brain, uint64_t seed, int genLabel);
 
@@ -65,6 +69,7 @@ private:
 
     EvolutionOptions opts_;
     RuntimeConfig    rcfg_;            // pro Generation eingefroren
+    float            policyTemp_ = POLICY_TEMP_START;   // Temperatur der Aktionswahl im Training
     float            difficulty_ = 0;  // Curriculum der aktuellen Generation
     TrainingMonitor* monitor_ = nullptr;
 };

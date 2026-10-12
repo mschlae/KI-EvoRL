@@ -51,6 +51,12 @@ struct World {
     int   foodEaten = 0;
     float totalReward = 0;
 
+    // Kennzahlen: Kollisionen und Umweg (gelaufene Schritte je Futter / kuerzester Weg dorthin)
+    int   collisions = 0;
+    float detourSum = 0;      // Summe der Umwegfaktoren aller gefressenen Futter
+    int   legSteps = 0;       // Schritte seit dem letzten Futter (bzw. Start)
+    int   legStartIdx = 0;
+
     // Eigener Zufallsstrom (Karte, Respawns, Sensorrauschen, Aktionswahl). Wird bei der
     // Konstruktion aus dem Thread-Generator gezogen -> set_local_seed() vor dem Erzeugen
     // macht die ganze Episode reproduzierbar, und mehrere Welten koennen verzahnt laufen.
@@ -91,6 +97,12 @@ struct World {
     void  reset();
     // Ersetzt die Karte durch eine eigene (Rand ist immer Wand) und startet die Episode neu.
     void  loadCustomMap(const CustomMap& map);
+
+    // Bitmaske der Aktionen (Bit i = Aktion i), die gegen Wand/Hindernis laufen wuerden.
+    uint8_t blockedMask() const;
+    // Kuerzeste Weglaenge (Zellen) zwischen zwei Zellen ueber begehbare Felder; -1 = unerreichbar.
+    int shortestPath(int fromIdx, int toIdx) const;
+    float meanDetour() const { return foodEaten > 0 ? detourSum / foodEaten : 1.0f; }
 
     std::array<float, INPUTS> getSensors();
     float executeAction(int action);

@@ -39,6 +39,7 @@
     <ClInclude Include="src\Brain.h"><Filter>Simulation</Filter></ClInclude>
     <ClInclude Include="src\Replay.h"><Filter>Simulation</Filter></ClInclude>
     <ClInclude Include="src\ModelStore.h"><Filter>Web</Filter></ClInclude>
+    <ClInclude Include="src\Metrics.h"><Filter>Simulation</Filter></ClInclude>
     <ClInclude Include="src\Evolution.h"><Filter>Evolution</Filter></ClInclude>
     <ClInclude Include="src\TrainingMonitor.h"><Filter>Web</Filter></ClInclude>
     <ClInclude Include="src\HttpServer.h"><Filter>Web</Filter></ClInclude>

@@ -90,6 +90,24 @@ constexpr float SPECIES_THRESHOLD_ADAPT = 0.03f;     // relative Aenderung der D
 constexpr float SPECIES_THRESHOLD_MIN = 0.50f;
 constexpr float SPECIES_THRESHOLD_MAX = 0.9995f;
 
+// Politik: Aktionswahl waehrend des Trainings. Die Temperatur faellt von START auf END
+// (1 = reines Softmax-Wuerfeln, -> 0 = immer die beste Aktion). Replays/Demo/Benchmark
+// nutzen immer die Temperatur 0 (greedy), also das, was ein fertiges Modell tut.
+constexpr float POLICY_TEMP_START = 1.0f;
+constexpr float POLICY_TEMP_END = 0.25f;
+constexpr int   POLICY_TEMP_GENS = 500;
+
+// Fitness: Direktheit und Kollisionen
+constexpr float DIRECTNESS_WEIGHT = 25.0f;           // Bonus je Futter * (1 / Umwegfaktor)
+constexpr float COLLISION_FITNESS_PENALTY = 25.0f;   // Abzug je Wand-/Hindernis-Kollision
+constexpr int   EXPLORE_FADE_GENS = 600;             // Erkundungsanreize blenden bis hierhin aus (auf 10 %)
+
+// Benchmark: feste Karten, greedy -> vergleichbare Kennzahlen ueber das ganze Training
+constexpr int   BENCH_MAPS = 20;
+constexpr int   BENCH_INTERVAL = 5;                  // alle N Generationen
+constexpr int   BENCH_EARLY_STOP = 800;
+constexpr unsigned long long BENCH_SEED = 0xBE9C4000ull;
+
 // Dashboard
 constexpr int   REPLAY_INTERVAL = 10;                // Replay des Besten alle N Generationen
 
@@ -105,6 +123,7 @@ struct RuntimeConfig {
 	float rewardWeight = 0.3f; // Anteil von totalReward in Fitness
 	float exploreBonus = EXPLORATION_BONUS;
 	float efficiencyBonus = 1.0f; // Skaliert den Effizienz-Bonus in Fitness
+	bool  maskBlocked = true;     // Aktionsmaske: Zuege in Waende/Hindernisse sind ausgeschlossen
 };
 
 // Liefert eine threadsichere Kopie der aktuellen Laufzeitkonfiguration.

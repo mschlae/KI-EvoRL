@@ -37,6 +37,7 @@ want a binary that runs on other machines, configure with `-DEVORL_NATIVE=OFF`.
 | `--no-server` | Headless training without dashboard |
 | `--no-wait` | Do not wait for ENTER at the end |
 | `--no-demo` | Skip the console demo of the best agent |
+| `--no-mask` | Disable the action mask (moves into walls/obstacles are then allowed and penalised) |
 | `--quiet` | One line per generation off |
 
 `Ctrl+C` stops training cleanly (same as the dashboard's stop button).
@@ -69,6 +70,7 @@ EvoRL/
 │   ├── Brain.h/.cpp          GRU network with self-adaptive mutation
 │   ├── Evolution.h/.cpp      Genetic algorithm + speciation
 │   ├── Replay.h/.cpp         Episode → compact JSON replay
+│   ├── Metrics.h             Benchmark result struct
 │   ├── ModelStore.h/.cpp     Atomic model persistence (BRN2, reads legacy BRN1)
 │   ├── Json.h                Tiny JSON helpers for the API
 │   ├── TrainingMonitor.h/.cpp Thread-safe status for dashboard + model library
@@ -148,6 +150,17 @@ The dashboard is compiled as a string in `src/DashboardHtml.cpp` so the executab
 - **OpenMP Parallelization**: Multi-threaded fitness evaluation
 - **Real-time Dashboard**: Live monitoring, model library and map playground
 - **Cross-platform**: Windows (Visual Studio), Linux, macOS (CMake)
+
+## 🎯 Direct, obstacle-avoiding behaviour
+
+The goal is an agent that walks straight to food and never runs into obstacles. Training and the dashboard are built around that:
+
+- **Action mask** (`maskBlocked`, on by default): moves into a wall/obstacle are excluded before an action is chosen, so the agent can never collide. The network only has to learn *where* to go. Switch off with `--no-mask` or `{"maskBlocked": false}` on `POST /api/config`.
+- **Greedy policy for finished models:** replays, the console demo, the playground and the benchmark always take the highest-scoring action. During training the action is sampled with a temperature that falls from `POLICY_TEMP_START` to `POLICY_TEMP_END` over `POLICY_TEMP_GENS` generations. The playground accepts `"temperature"` in its request body.
+- **Fitness rewards directness:** a bonus per food scaled by `1 / detour factor` (`DIRECTNESS_WEIGHT`) and a penalty per collision (`COLLISION_FITNESS_PENALTY`). Exploration incentives fade out over `EXPLORE_FADE_GENS` generations so a mature agent stops wandering.
+- **Benchmark** (every `BENCH_INTERVAL` generations, shown on the training page and in `/api/status` as `benchmark` / `benchHistory`): the current best model plays `BENCH_MAPS` fixed maps greedily. Reported: food per episode, steps per food, collisions per episode, **detour factor** (steps walked ÷ shortest path by BFS, 1.0 = perfect) and the share of episodes survived to the step limit. Unlike fitness these numbers are comparable across the whole run.
+
+In a 4-minute A/B test with the same seed, the mask run reached 191 food per episode, 7.6 steps per food, 0 collisions and a detour factor of 1.14 after ~125 generations; the run without mask reached 49 food, 1.55 collisions per episode and a detour factor of 1.42 after ~315 generations. This is a single seed, not a statistical comparison.
 
 ## 🛠 What changed in the rewrite
 

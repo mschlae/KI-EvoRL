@@ -12,6 +12,7 @@
 //     in die Population uebernimmt (requestModelLoad / takePendingLoad).
 // ============================================================
 #include "Brain.h"
+#include "Metrics.h"
 #include "ModelStore.h"
 
 #include <atomic>
@@ -59,6 +60,9 @@ public:
     void requestStop() { stopRequested_.store(true); }   // lock-frei -> auch aus Signal-Handlern nutzbar
     bool stopRequested() const { return stopRequested_.load(); }
 
+    // Ergebnis eines Benchmark-Laufs (feste Karten, greedy) -> Dashboard.
+    void setBenchmark(const BenchResult& r);
+
     // Aufgezeichnete Episode des aktuell besten Agenten (JSON, vom Training gesetzt).
     void setReplay(std::string json);
 
@@ -97,6 +101,7 @@ private:
     // Brain zu "live" oder gespeicherter ID; false, wenn unbekannt.
     bool findBrain(const std::string& id, std::unique_ptr<Brain>& out, int& gen) const;
     void rebuildHistoryJson();   // nur unter m_ aufrufen
+    void rebuildBenchJson();     // nur unter m_ aufrufen
 
     std::string modelsDir_;
     mutable std::mutex m_;
@@ -114,6 +119,9 @@ private:
 
     std::chrono::steady_clock::time_point start_;
     std::vector<GenRecord> history_;
+    std::vector<BenchResult> benchHistory_;
+    std::string benchJson_ = "null";       // letztes Ergebnis
+    std::string benchHistoryJson_ = "{}";  // Verlauf als Arrays
     std::string historyJson_ = "{}";   // vorserialisierte Verlaufs-Arrays (einmal je Generation)
     std::string replay_;
 

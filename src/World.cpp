@@ -106,6 +106,7 @@ void World::buildBorder() {
 void World::startEpisode() {
     energy = START_ENERGY; alive = true; steps = 0; foodEaten = 0; totalReward = 0;
     lastAction = 0;
+    collisions = 0; detourSum = 0; legSteps = 0; legStartIdx = agentY * GRID_W + agentX;
     visited.reset();
     visited.set(agentY * GRID_W + agentX);
     visitedCount = 1;
@@ -181,6 +182,43 @@ void World::loadCustomMap(const CustomMap& map) {
 
     rebuildFoodList();
     startEpisode();
+}
+
+uint8_t World::blockedMask() const {
+    static const int DX[4] = { -1, 1, 0, 0 }, DY[4] = { 0, 0, -1, 1 };   // wie in executeAction()
+    uint8_t m = 0;
+    for (int a = 0; a < 4; a++) {
+        int nx = agentX + DX[a], ny = agentY + DY[a];
+        bool blocked = nx < 0 || nx >= GRID_W || ny < 0 || ny >= GRID_H
+            || grid[ny * GRID_W + nx] == WALL || grid[ny * GRID_W + nx] == OBSTACLE;
+        if (blocked) m |= uint8_t(1u << a);
+    }
+    return m;
+}
+
+int World::shortestPath(int fromIdx, int toIdx) const {
+    if (fromIdx == toIdx) return 0;
+    std::array<int16_t, CELLS> dist;
+    std::array<int16_t, CELLS> queue;
+    dist.fill(-1);
+    int head = 0, tail = 0;
+    dist[fromIdx] = 0;
+    queue[tail++] = (int16_t)fromIdx;
+    while (head < tail) {
+        int cur = queue[head++];
+        int cx = kCell.x[cur], cy = kCell.y[cur];
+        static const int DX[4] = { -1, 1, 0, 0 }, DY[4] = { 0, 0, -1, 1 };
+        for (int a = 0; a < 4; a++) {
+            int nx = cx + DX[a], ny = cy + DY[a];
+            if (nx < 0 || nx >= GRID_W || ny < 0 || ny >= GRID_H) continue;
+            int ni = ny * GRID_W + nx;
+            if (dist[ni] >= 0 || grid[ni] == WALL || grid[ni] == OBSTACLE) continue;
+            dist[ni] = dist[cur] + 1;
+            if (ni == toIdx) return dist[ni];
+            queue[tail++] = (int16_t)ni;
+        }
+    }
+    return -1;
 }
 
 // --------------------------------------------------------
@@ -275,8 +313,10 @@ float World::executeAction(int action) {
     int nIdx = ny * GRID_W + nx;
     float reward = -cfg.stepCost;
 
+    legSteps++;
     if (grid[nIdx] == WALL || grid[nIdx] == OBSTACLE) {
         reward += WALL_PENALTY;
+        collisions++;
     }
     else {
         agentX = nx; agentY = ny;
@@ -314,6 +354,10 @@ float World::executeAction(int action) {
         // Food fressen
         if (grid[curIdx] == FOOD) {
             reward += cfg.foodReward;
+            // Umwegfaktor dieses Wegstuecks: tatsaechliche Schritte / kuerzester Weg
+            int geo = shortestPath(legStartIdx, curIdx);
+            detourSum += (geo > 0) ? max(1.0f, float(legSteps) / float(geo)) : 1.0f;
+            legSteps = 0; legStartIdx = curIdx;
             removeFood(curIdx);
             foodEaten++;
             energy += cfg.foodReward * 0.4f; // Energie regenerieren beim Essen

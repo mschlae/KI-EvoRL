@@ -195,6 +195,79 @@ static void testWorld() {
     CHECK(w2.agentX == 11 && w2.agentY == 10);
 }
 
+// ---------------------------------------------------------------- Aktionsmaske / Greedy / Kennzahlen
+static void testPolicyAndMetrics() {
+    set_local_seed(321);
+    Rng rng; rng.seed(1);
+
+    // greedy: hoechstes Logit, ohne Zufall
+    for (int i = 0; i < 50; i++) {
+        float lg[OUTPUTS] = { 0.1f, 2.0f, -1.0f, 0.5f };
+        CHECK(Brain::sampleAction(lg, rng, 0.0f, 0) == 1);
+    }
+    // Maske: gesperrte Aktion wird nie gewaehlt (greedy und gewuerfelt)
+    for (int i = 0; i < 2000; i++) {
+        float a[OUTPUTS] = { 0.1f, 5.0f, -1.0f, 0.5f };
+        CHECK(Brain::sampleAction(a, rng, 0.0f, 0b0010) == 3);
+        float b[OUTPUTS] = { 0.1f, 5.0f, -1.0f, 0.5f };
+        int act = Brain::sampleAction(b, rng, 1.0f, 0b0010);
+        CHECK(act != 1 && act >= 0 && act < OUTPUTS);
+    }
+    // alles gesperrt -> Maske wird ignoriert (kein Absturz, gueltige Aktion)
+    { float lg[OUTPUTS] = { 1, 2, 3, 4 }; CHECK(Brain::sampleAction(lg, rng, 1.0f, 0xF) >= 0); }
+    // niedrige Temperatur -> fast immer die beste Aktion
+    { int hit = 0; for (int i = 0; i < 1000; i++) { float lg[OUTPUTS] = { 0, 1, 0, 0 }; hit += Brain::sampleAction(lg, rng, 0.1f, 0) == 1; } CHECK(hit > 990); }
+
+    // World: blockedMask, Kollisionen, kuerzester Weg
+    RuntimeConfig cfg;
+    World w(1.0f, cfg, false);
+    CustomMap m;
+    m.startX = 5; m.startY = 5;
+    for (int y = 3; y <= 7; y++) m.walls.push_back(y * GRID_W + 6);      // senkrechte Wand rechts vom Start
+    m.food = { 5 * GRID_W + 8 };                                        // Futter dahinter
+    w.loadCustomMap(m);
+    CHECK(w.blockedMask() == 0b0010);                                    // nur "rechts" gesperrt
+    CHECK(w.shortestPath(5 * GRID_W + 5, 5 * GRID_W + 8) == 9);          // Umweg um die Wand (y 3..7): 3 hoch, 3 rechts, 3 runter
+    CHECK(w.shortestPath(5 * GRID_W + 5, 5 * GRID_W + 5) == 0);
+    w.executeAction(1);                                                  // gegen die Wand
+    CHECK(w.collisions == 1);
+
+    // Direkter Weg: Umwegfaktor 1
+    World w2(1.0f, cfg, false);
+    CustomMap m2; m2.startX = 5; m2.startY = 5; m2.food = { 5 * GRID_W + 8 };
+    w2.loadCustomMap(m2);
+    for (int i = 0; i < 3; i++) w2.executeAction(1);
+    CHECK(w2.foodEaten == 1 && w2.collisions == 0);
+    CHECK(std::fabs(w2.meanDetour() - 1.0f) < 1e-6f);
+    // Umweg: erst weg vom Futter, dann hin -> Faktor > 1
+    World w3(1.0f, cfg, false);
+    w3.loadCustomMap(m2);
+    w3.executeAction(0); w3.executeAction(0);                            // 2 nach links
+    for (int i = 0; i < 5; i++) w3.executeAction(1);                     // 5 nach rechts
+    CHECK(w3.foodEaten == 1 && std::fabs(w3.meanDetour() - 7.0f / 3.0f) < 1e-4f);
+
+    // Fitness: Direktheit belohnt, Kollisionen bestraft
+    EvolutionOptions o; o.verbose = false;
+    auto evo = std::make_unique<Evolution>(o);
+    World a(1.0f, cfg, false), b(1.0f, cfg, false);
+    a.loadCustomMap(m2); b.loadCustomMap(m2);
+    a.foodEaten = b.foodEaten = 5; a.steps = b.steps = 100; a.detourSum = 5.0f; b.detourSum = 10.0f;
+    CHECK(evo->computeBaseFitness(a) > evo->computeBaseFitness(b));
+    b.detourSum = 5.0f; b.collisions = 4;
+    CHECK(evo->computeBaseFitness(a) > evo->computeBaseFitness(b));
+
+    // Benchmark: reproduzierbar, plausible Werte; Maske verhindert Kollisionen
+    set_local_seed(9);
+    auto br = std::make_unique<Brain>();
+    BenchResult r1 = evo->benchmark(*br, 1);
+    BenchResult r2 = evo->benchmark(*br, 1);
+    CHECK(r1.episodes == BENCH_MAPS);
+    CHECK(r1.avgFood == r2.avgFood && r1.avgSteps == r2.avgSteps && r1.detour == r2.detour);
+    CHECK(r1.collisions == 0.0f);                                        // Maske ist Standard
+    CHECK(r1.detour >= 1.0f - 1e-4f || r1.avgFood == 0.0f);
+    CHECK(r1.survived >= 0.0f && r1.survived <= 1.0f);
+}
+
 // ---------------------------------------------------------------- Replay
 static void testReplay() {
     set_local_seed(77);
@@ -350,6 +423,15 @@ static void testMonitor() {
         CHECK(!mon.applyConfigJson("{\"foodReward\":nan}"));
         CHECK(mon.applyConfigJson("{\"foodReward\":77}"));
         CHECK(getRuntimeConfig().foodReward == 77.0f);
+        CHECK(getRuntimeConfig().maskBlocked);
+        CHECK(mon.applyConfigJson("{\"maskBlocked\":false}") && !getRuntimeConfig().maskBlocked);
+        CHECK(mon.configJson().find("\"maskBlocked\":false") != std::string::npos);
+        CHECK(mon.applyConfigJson("{\"maskBlocked\":1}") && getRuntimeConfig().maskBlocked);
+        BenchResult br; br.gen = 5; br.episodes = 20; br.stepsPerFood = 12.5f; br.detour = 1.2f;
+        mon.setBenchmark(br);
+        std::string st = mon.toJson();
+        CHECK(st.find("\"benchmark\":{\"gen\":5") != std::string::npos);
+        CHECK(st.find("\"benchHistory\":{\"gen\":[5]") != std::string::npos);
         setRuntimeConfig(RuntimeConfig());
     }
     // Neu starten: gespeichertes Modell wird gefunden
@@ -417,6 +499,7 @@ int main(int argc, char** argv) {
     RUN(testRng());
     RUN(testBrain());
     RUN(testWorld());
+    RUN(testPolicyAndMetrics());
     RUN(testReplay());
     RUN(testJson());
     RUN(testModelStore(srcDir));

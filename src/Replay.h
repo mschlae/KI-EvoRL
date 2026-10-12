@@ -13,5 +13,7 @@
 
 // Spielt eine Episode auf der bereits initialisierten World durch (bis Tod
 // oder `maxSteps`) und liefert das Replay-JSON. Setzt das Gedaechtnis des
-// Brains zurueck.
-std::string buildReplayJson(World& world, Brain& brain, int genLabel, int maxSteps);
+// Brains zurueck. `temperature` 0 = greedy (so verhaelt sich ein fertiges
+// Modell); die Aktionsmaske folgt world.cfg.maskBlocked.
+std::string buildReplayJson(World& world, Brain& brain, int genLabel, int maxSteps,
+    float temperature = 0.0f);
